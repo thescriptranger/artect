@@ -7,21 +7,23 @@ using System.Text;
 namespace Artect.Generation.Emitters;
 
 /// <summary>
-/// Emits <c>&lt;Project&gt;.sln</c> at the scaffold root.
-/// GUIDs are derived deterministically from the project's relative .csproj path
-/// so the file is byte-identical across machines and runs.
+/// Emits <c>&lt;Project&gt;.sln</c> at the scaffold root. Source projects are
+/// grouped under a <c>src</c> solution folder and test projects under a
+/// <c>tests</c> solution folder so Visual Studio's Solution Explorer matches
+/// the on-disk layout. GUIDs are derived deterministically from the project's
+/// relative .csproj path so the file is byte-identical across machines.
 /// </summary>
 public sealed class SlnEmitter : IEmitter
 {
-    private const string CsharpSdkProjectTypeGuid = "9A19103F-16F7-4668-BE54-9A1E7A4F7556";
+    private const string CsharpSdkProjectTypeGuid  = "9A19103F-16F7-4668-BE54-9A1E7A4F7556";
+    private const string SolutionFolderTypeGuid    = "2150E333-8FDC-42A3-9474-1A3956D46DE8";
 
     public IReadOnlyList<EmittedFile> Emit(EmitterContext ctx)
     {
         var cfg     = ctx.Config;
         var project = cfg.ProjectName;
 
-        // Collect csproj relative paths (forward-slash, as stored by other emitters)
-        var csprojPaths = new List<string>
+        var srcPaths = new List<string>
         {
             $"{CleanLayout.ApiDir(project)}/{CleanLayout.ApiProjectName(project)}.csproj",
             $"{CleanLayout.ApplicationDir(project)}/{CleanLayout.ApplicationProjectName(project)}.csproj",
@@ -30,40 +32,59 @@ public sealed class SlnEmitter : IEmitter
             $"{CleanLayout.SharedDir(project)}/{CleanLayout.SharedProjectName(project)}.csproj",
         };
 
+        var testPaths = new List<string>();
         if (cfg.IncludeTestsProject)
         {
-            var domainTests  = $"{project}.Domain.Tests";
-            var appTests     = $"{project}.Application.Tests";
-            var infraTests   = $"{project}.Infrastructure.Tests";
-            var apiTests     = $"{project}.Api.Tests";
+            var domainTests = $"{project}.Domain.Tests";
+            var appTests    = $"{project}.Application.Tests";
+            var infraTests  = $"{project}.Infrastructure.Tests";
+            var apiTests    = $"{project}.Api.Tests";
 
-            csprojPaths.Add($"tests/{domainTests}/{domainTests}.csproj");
-            csprojPaths.Add($"tests/{appTests}/{appTests}.csproj");
-            csprojPaths.Add($"tests/{infraTests}/{infraTests}.csproj");
-            csprojPaths.Add($"tests/{apiTests}/{apiTests}.csproj");
+            testPaths.Add($"tests/{domainTests}/{domainTests}.csproj");
+            testPaths.Add($"tests/{appTests}/{appTests}.csproj");
+            testPaths.Add($"tests/{infraTests}/{infraTests}.csproj");
+            testPaths.Add($"tests/{apiTests}/{apiTests}.csproj");
         }
 
         var projectTypeGuid = "{" + CsharpSdkProjectTypeGuid + "}";
+        var folderTypeGuid  = "{" + SolutionFolderTypeGuid + "}";
         var slnGuid         = StableGuid($"sln::{project}").ToString("B").ToUpperInvariant();
+        var srcFolderGuid   = StableGuid($"folder::src::{project}").ToString("B").ToUpperInvariant();
+        var testsFolderGuid = StableGuid($"folder::tests::{project}").ToString("B").ToUpperInvariant();
 
-        var entries = new List<(string AssemblyName, string BackslashPath, string Guid)>();
-        foreach (var p in csprojPaths)
-        {
-            var assemblyName = System.IO.Path.GetFileNameWithoutExtension(p);
-            var backslash    = p.Replace('/', '\\');
-            var guid         = StableGuid($"project::{p}").ToString("B").ToUpperInvariant();
-            entries.Add((assemblyName, backslash, guid));
-        }
+        var srcEntries = new List<(string AssemblyName, string BackslashPath, string Guid)>();
+        foreach (var p in srcPaths) srcEntries.Add(BuildEntry(p));
+
+        var testEntries = new List<(string AssemblyName, string BackslashPath, string Guid)>();
+        foreach (var p in testPaths) testEntries.Add(BuildEntry(p));
+
+        var allEntries = new List<(string AssemblyName, string BackslashPath, string Guid)>();
+        allEntries.AddRange(srcEntries);
+        allEntries.AddRange(testEntries);
 
         var sb = new StringBuilder();
         sb.AppendLine("Microsoft Visual Studio Solution File, Format Version 12.00");
         sb.AppendLine("# Visual Studio Version 17");
 
-        foreach (var (name, path, guid) in entries)
+        // Concrete projects first, then the solution folders.
+        foreach (var (name, path, guid) in allEntries)
         {
             sb.AppendFormat(CultureInfo.InvariantCulture,
                 "Project(\"{0}\") = \"{1}\", \"{2}\", \"{3}\"",
                 projectTypeGuid, name, path, guid).AppendLine();
+            sb.AppendLine("EndProject");
+        }
+
+        sb.AppendFormat(CultureInfo.InvariantCulture,
+            "Project(\"{0}\") = \"src\", \"src\", \"{1}\"",
+            folderTypeGuid, srcFolderGuid).AppendLine();
+        sb.AppendLine("EndProject");
+
+        if (testEntries.Count > 0)
+        {
+            sb.AppendFormat(CultureInfo.InvariantCulture,
+                "Project(\"{0}\") = \"tests\", \"tests\", \"{1}\"",
+                folderTypeGuid, testsFolderGuid).AppendLine();
             sb.AppendLine("EndProject");
         }
 
@@ -74,7 +95,7 @@ public sealed class SlnEmitter : IEmitter
         sb.AppendLine("\tEndGlobalSection");
         sb.AppendLine("\tGlobalSection(ProjectConfigurationPlatforms) = postSolution");
 
-        foreach (var (_, _, guid) in entries)
+        foreach (var (_, _, guid) in allEntries)
         {
             sb.AppendFormat(CultureInfo.InvariantCulture, "\t\t{0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU", guid).AppendLine();
             sb.AppendFormat(CultureInfo.InvariantCulture, "\t\t{0}.Debug|Any CPU.Build.0 = Debug|Any CPU", guid).AppendLine();
@@ -86,12 +107,29 @@ public sealed class SlnEmitter : IEmitter
         sb.AppendLine("\tGlobalSection(SolutionProperties) = preSolution");
         sb.AppendLine("\t\tHideSolutionNode = FALSE");
         sb.AppendLine("\tEndGlobalSection");
+
+        // Parent each concrete project under its solution folder.
+        sb.AppendLine("\tGlobalSection(NestedProjects) = preSolution");
+        foreach (var (_, _, guid) in srcEntries)
+            sb.AppendFormat(CultureInfo.InvariantCulture, "\t\t{0} = {1}", guid, srcFolderGuid).AppendLine();
+        foreach (var (_, _, guid) in testEntries)
+            sb.AppendFormat(CultureInfo.InvariantCulture, "\t\t{0} = {1}", guid, testsFolderGuid).AppendLine();
+        sb.AppendLine("\tEndGlobalSection");
+
         sb.AppendLine("\tGlobalSection(ExtensibilityGlobals) = postSolution");
         sb.AppendFormat(CultureInfo.InvariantCulture, "\t\tSolutionGuid = {0}", slnGuid).AppendLine();
         sb.AppendLine("\tEndGlobalSection");
         sb.Append("EndGlobal");
 
         return new[] { new EmittedFile($"{project}.sln", sb.ToString()) };
+    }
+
+    static (string AssemblyName, string BackslashPath, string Guid) BuildEntry(string csprojPath)
+    {
+        var assemblyName = System.IO.Path.GetFileNameWithoutExtension(csprojPath);
+        var backslash    = csprojPath.Replace('/', '\\');
+        var guid         = StableGuid($"project::{csprojPath}").ToString("B").ToUpperInvariant();
+        return (assemblyName, backslash, guid);
     }
 
     // Deterministic GUID: MD5 of UTF-8 seed → 16 bytes → Guid
