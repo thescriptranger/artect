@@ -1,5 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <EmbeddedResource Include="Files/**/*.artect" />
+    <EmbeddedResource Include="Files/**/*.artect">
+      <!--
+        WithCulture=false stops MSBuild from treating the ".cs" in "Foo.cs.artect"
+        as a culture code (Czech) and emitting the files into a satellite assembly.
+      -->
+      <WithCulture>false</WithCulture>
+      <Type>Non-Resx</Type>
+      <LogicalName>Artect.Templates.Files.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 </Project>
