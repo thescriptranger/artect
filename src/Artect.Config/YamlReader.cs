@@ -29,12 +29,16 @@ public static class YamlReader
         foreach (var k in values.Keys)
             if (!knownKeys.Contains(k)) throw new YamlException($"Unknown key '{k}' in artect.yaml.");
 
+        var emitRepos = ParseBool(Require("emitRepositoriesAndAbstractions"));
+        if (!emitRepos)
+            throw new YamlException("emitRepositoriesAndAbstractions: false is no longer supported. Repositories are required for the Clean Architecture shape introduced in the compliance pass.");
+
         return new ArtectConfig(
             ProjectName: Require("projectName").Trim(),
             OutputDirectory: Require("outputDirectory").Trim(),
             TargetFramework: TargetFrameworkExtensions.FromMoniker(Require("targetFramework").Trim()),
             DataAccess: ParseEnum<DataAccessKind>(Require("dataAccess")),
-            EmitRepositoriesAndAbstractions: ParseBool(Require("emitRepositoriesAndAbstractions")),
+            EmitRepositoriesAndAbstractions: emitRepos,
             SplitRepositoriesByIntent: values.TryGetValue("splitRepositoriesByIntent", out var splitVal) ? ParseBool(splitVal) : true,
             GeneratedByLabel: TrimQuotes(Require("generatedByLabel")),
             GenerateInitialMigration: ParseBool(Require("generateInitialMigration")),
