@@ -16,7 +16,7 @@ public sealed class DockerEmitter : IEmitter
 
         var cfg     = ctx.Config;
         var project = cfg.ProjectName;
-        var tag     = cfg.TargetFramework == TargetFramework.Net8_0 ? "8.0" : "9.0";
+        var tag     = cfg.TargetFramework.DockerTag();
         var apiName = CleanLayout.ApiProjectName(project);
         var infraName = CleanLayout.InfrastructureProjectName(project);
 

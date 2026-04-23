@@ -46,6 +46,7 @@ public sealed class CsProjEmitter : IEmitter
 
     static EmittedFile EmitApi(string project, string tfm, ArtectConfig cfg)
     {
+        var major = cfg.TargetFramework.MajorVersion();
         var sb = new StringBuilder();
         sb.AppendLine("<Project Sdk=\"Microsoft.NET.Sdk.Web\">");
         sb.AppendLine();
@@ -55,11 +56,11 @@ public sealed class CsProjEmitter : IEmitter
         sb.AppendLine("  </PropertyGroup>");
         sb.AppendLine();
         sb.AppendLine("  <ItemGroup>");
-        sb.AppendLine(PackageRef("Microsoft.AspNetCore.OpenApi", "9.0.*"));
+        sb.AppendLine(PackageRef("Microsoft.AspNetCore.OpenApi", $"{major}.0.*"));
         sb.AppendLine(PackageRef("Scalar.AspNetCore", "2.*"));
 
         if (cfg.Auth == AuthKind.JwtBearer)
-            sb.AppendLine(PackageRef("Microsoft.AspNetCore.Authentication.JwtBearer", "9.0.*"));
+            sb.AppendLine(PackageRef("Microsoft.AspNetCore.Authentication.JwtBearer", $"{major}.0.*"));
         else if (cfg.Auth == AuthKind.AzureAd)
             sb.AppendLine(PackageRef("Microsoft.Identity.Web", "3.*"));
 
@@ -126,6 +127,7 @@ public sealed class CsProjEmitter : IEmitter
 
     static EmittedFile EmitInfrastructure(string project, string tfm, ArtectConfig cfg)
     {
+        var major = cfg.TargetFramework.MajorVersion();
         var sb = new StringBuilder();
         sb.AppendLine("<Project Sdk=\"Microsoft.NET.Sdk\">");
         sb.AppendLine();
@@ -137,8 +139,8 @@ public sealed class CsProjEmitter : IEmitter
 
         if (cfg.DataAccess == DataAccessKind.EfCore)
         {
-            sb.AppendLine(PackageRef("Microsoft.EntityFrameworkCore", "9.0.*"));
-            sb.AppendLine(PackageRef("Microsoft.EntityFrameworkCore.SqlServer", "9.0.*"));
+            sb.AppendLine(PackageRef("Microsoft.EntityFrameworkCore", $"{major}.0.*"));
+            sb.AppendLine(PackageRef("Microsoft.EntityFrameworkCore.SqlServer", $"{major}.0.*"));
         }
         else // Dapper
         {
