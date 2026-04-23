@@ -1,3 +1,2 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: Readme.cs.artect
-// Purpose (from plan): repo hygiene file - README.md.
+// Placeholder — RepoHygieneEmitter builds README.md content programmatically.
+// This file exists so the template assembly correctly lists the resource.

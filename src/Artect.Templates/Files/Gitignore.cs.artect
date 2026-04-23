@@ -1,3 +1,17 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: Gitignore.cs.artect
-// Purpose (from plan): repo hygiene file - .gitignore.
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.vscode/
+.idea/
+
+TestResults/
+coverage*
+
+appsettings.Development.json
+appsettings.Local.json
+*.local.json
+
+.DS_Store
+Thumbs.db

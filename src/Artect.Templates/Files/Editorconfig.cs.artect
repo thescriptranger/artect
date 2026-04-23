@@ -1,3 +1,17 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: Editorconfig.cs.artect
-// Purpose (from plan): repo hygiene file - .editorconfig.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{json,csproj,props,targets,sln}]
+indent_size = 2
+
+[*.cs]
+csharp_using_directive_placement = outside_namespace:warning
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_prefer_braces = when_multiline:warning
