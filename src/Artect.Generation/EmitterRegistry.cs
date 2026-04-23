@@ -31,6 +31,7 @@ public static class EmitterRegistry
         new RepositoryInterfaceEmitter(),
         new RequestEmitter(),
         new ResponseEmitter(),
+        new ServiceInstallerEmitter(),
         new SlnEmitter(),
         new StoredProceduresEmitter(),
         new TestsProjectEmitter(),

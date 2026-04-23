@@ -49,6 +49,10 @@ public static class CleanLayout
     public static string LoggingPath(string root, string className) => $"{InfrastructureDir(root)}/Logging/{className}.cs";
     public static string LoggingNamespace(string root) => $"{root}.Infrastructure.Logging";
 
+    // DI installer extensions
+    public static string ApplicationInstallerPath(string root) => $"{ApplicationDir(root)}/DependencyInjection/ApplicationServiceCollectionExtensions.cs";
+    public static string InfrastructureInstallerPath(string root) => $"{InfrastructureDir(root)}/DependencyInjection/InfrastructureServiceCollectionExtensions.cs";
+
     public static string ApiNamespace(string root) => $"{root}.Api";
     public static string ApplicationNamespace(string root) => $"{root}.Application";
     public static string DomainNamespace(string root) => $"{root}.Domain";
