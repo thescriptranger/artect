@@ -1,19 +1,8 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace {{ Namespace }};
 
 public sealed class {{ Kind }}{{ EntityName }}Request
 {
 {{# for prop in Properties }}
-{{# if prop.Required }}
-    [Required]
-{{/if}}
-{{# if prop.HasStringLength }}
-    [StringLength({{ prop.StringLength }})]
-{{/if}}
-{{# if prop.HasRange }}
-    [Range({{ prop.RangeMin }}, {{ prop.RangeMax }})]
-{{/if}}
     public {{ prop.ClrTypeWithNullability }} {{ prop.PropertyName }} { get; set; }{{ prop.Initializer }}
 {{/for}}
 }
