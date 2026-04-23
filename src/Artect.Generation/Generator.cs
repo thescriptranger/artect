@@ -16,12 +16,12 @@ public sealed class Generator
     public Generator(IReadOnlyList<IEmitter> emitters) =>
         _emitters = emitters.OrderBy(e => e.GetType().Name, StringComparer.Ordinal).ToList();
 
-    public void Generate(ArtectConfig cfg, SchemaGraph graph, string outputRoot)
+    public void Generate(ArtectConfig cfg, SchemaGraph graph, string outputRoot, string? connectionString = null)
     {
         var model = NamedSchemaModel.Build(graph);
         var templateAssembly = typeof(Artect.Templates.TemplatesMarker).Assembly;
         var loader = new TemplateLoader(templateAssembly, "Artect.Templates.Files");
-        var ctx = new EmitterContext(cfg, graph, model, loader);
+        var ctx = new EmitterContext(cfg, graph, model, loader, connectionString);
 
         var all = new List<EmittedFile>();
         foreach (var emitter in _emitters) all.AddRange(emitter.Emit(ctx));

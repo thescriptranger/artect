@@ -47,7 +47,7 @@ public sealed class NewCommand
         var generator = new Generator(EmitterRegistry.All());
         var outputRoot = Path.GetFullPath(config.OutputDirectory);
         Directory.CreateDirectory(outputRoot);
-        generator.Generate(config, graph, outputRoot);
+        generator.Generate(config, graph, outputRoot, connection2);
         System.Console.WriteLine($"Generated scaffold at {outputRoot}");
         return 0;
     }
