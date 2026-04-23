@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Artect.Core\Artect.Core.csproj" />
+    <ProjectReference Include="..\Artect.Config\Artect.Config.csproj" />
+  </ItemGroup>
+</Project>

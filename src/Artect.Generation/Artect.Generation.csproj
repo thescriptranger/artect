@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Artect.Core\Artect.Core.csproj" />
+    <ProjectReference Include="..\Artect.Naming\Artect.Naming.csproj" />
+    <ProjectReference Include="..\Artect.Templating\Artect.Templating.csproj" />
+    <ProjectReference Include="..\Artect.Templates\Artect.Templates.csproj" />
+    <ProjectReference Include="..\Artect.Config\Artect.Config.csproj" />
+  </ItemGroup>
+</Project>

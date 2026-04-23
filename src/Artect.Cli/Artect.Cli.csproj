@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Artect.Console\Artect.Console.csproj" />
+    <ProjectReference Include="..\Artect.Config\Artect.Config.csproj" />
+    <ProjectReference Include="..\Artect.Generation\Artect.Generation.csproj" />
+    <ProjectReference Include="..\Artect.Introspection\Artect.Introspection.csproj" />
+  </ItemGroup>
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>artect</ToolCommandName>
+    <PackageId>Artect</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Art Laubach</Authors>
+    <Description>Scaffolding CLI for Clean Architecture + Minimal API .NET solutions from SQL Server databases.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RootNamespace>Artect.Cli</RootNamespace>
+    <AssemblyName>artect</AssemblyName>
+  </PropertyGroup>
+</Project>

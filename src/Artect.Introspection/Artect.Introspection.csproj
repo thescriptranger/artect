@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Artect.Core\Artect.Core.csproj" />
+    <ProjectReference Include="..\Artect.Naming\Artect.Naming.csproj" />
+  </ItemGroup>
+</Project>
