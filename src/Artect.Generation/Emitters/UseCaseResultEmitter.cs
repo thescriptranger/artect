@@ -5,8 +5,6 @@ namespace Artect.Generation.Emitters;
 
 /// <summary>
 /// Emits <c>UseCaseResult.cs</c> into <c>src/&lt;Project&gt;.Application/UseCases/</c>.
-/// Always runs — even when <c>EmitUseCaseInteractors</c> is false, so downstream code
-/// can reference the discriminated-union types.
 /// </summary>
 public sealed class UseCaseResultEmitter : IEmitter
 {

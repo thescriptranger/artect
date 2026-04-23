@@ -9,16 +9,12 @@ namespace Artect.Generation.Emitters;
 
 /// <summary>
 /// Emits per-entity-per-operation use-case interface + implementation pairs.
-/// Only runs when <c>cfg.EmitUseCaseInteractors == true</c>.
 /// Entities with PK get full CRUD interactors; pk-less tables and views get List-only.
 /// </summary>
 public sealed class UseCaseInteractorEmitter : IEmitter
 {
     public IReadOnlyList<EmittedFile> Emit(EmitterContext ctx)
     {
-        if (!ctx.Config.EmitUseCaseInteractors)
-            return System.Array.Empty<EmittedFile>();
-
         var list    = new List<EmittedFile>();
         var project = ctx.Config.ProjectName;
         var crud    = ctx.Config.Crud;

@@ -35,7 +35,6 @@ public sealed class ServiceInstallerEmitter : IEmitter
         var model        = ctx.Model;
         var crud         = cfg.Crud;
         var anyWrite     = (crud & (CrudOperation.Post | CrudOperation.Put | CrudOperation.Patch)) != 0;
-        var useInteractors = cfg.EmitUseCaseInteractors;
 
         var ucAbsNs    = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.UseCases";
         var ucImplNs   = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
@@ -58,11 +57,8 @@ public sealed class ServiceInstallerEmitter : IEmitter
             usings.Add(sharedReqNs);
         }
 
-        if (useInteractors)
-        {
-            usings.Add(ucAbsNs);
-            usings.Add(ucImplNs);
-        }
+        usings.Add(ucAbsNs);
+        usings.Add(ucImplNs);
 
         var sb = new StringBuilder();
 
@@ -96,7 +92,6 @@ public sealed class ServiceInstallerEmitter : IEmitter
         }
 
         // ── Use-case interactors ──────────────────────────────────────────────
-        if (useInteractors)
         {
             var ucLines = new SortedSet<string>(System.StringComparer.Ordinal);
 

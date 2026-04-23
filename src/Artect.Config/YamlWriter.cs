@@ -17,7 +17,6 @@ public static class YamlWriter
         sb.AppendLine($"targetFramework: {cfg.TargetFramework.ToMoniker()}");
         sb.AppendLine($"dataAccess: {cfg.DataAccess}");
         sb.AppendLine($"emitRepositoriesAndAbstractions: {Bool(cfg.EmitRepositoriesAndAbstractions)}");
-        sb.AppendLine($"emitUseCaseInteractors: {Bool(cfg.EmitUseCaseInteractors)}");
         sb.AppendLine($"generatedByLabel: \"{cfg.GeneratedByLabel}\"");
         sb.AppendLine($"generateInitialMigration: {Bool(cfg.GenerateInitialMigration)}");
         sb.AppendLine($"crud: {CrudString(cfg.Crud)}");

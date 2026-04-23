@@ -20,7 +20,7 @@ public static class YamlReader
         var knownKeys = new HashSet<string>(StringComparer.Ordinal)
         {
             "projectName","outputDirectory","targetFramework","dataAccess","emitRepositoriesAndAbstractions",
-            "emitUseCaseInteractors","generatedByLabel","generateInitialMigration","crud","apiVersioning","auth",
+            "generatedByLabel","generateInitialMigration","crud","apiVersioning","auth",
             "includeTestsProject","includeDockerAssets","partitionStoredProceduresBySchema",
             "includeChildCollectionsInResponses","validateForeignKeyReferences","schemas","connectionString"
         };
@@ -33,7 +33,6 @@ public static class YamlReader
             TargetFramework: TargetFrameworkExtensions.FromMoniker(Require("targetFramework").Trim()),
             DataAccess: ParseEnum<DataAccessKind>(Require("dataAccess")),
             EmitRepositoriesAndAbstractions: ParseBool(Require("emitRepositoriesAndAbstractions")),
-            EmitUseCaseInteractors: values.TryGetValue("emitUseCaseInteractors", out var uci) ? ParseBool(uci) : true,
             GeneratedByLabel: TrimQuotes(Require("generatedByLabel")),
             GenerateInitialMigration: ParseBool(Require("generateInitialMigration")),
             Crud: ParseCrud(Require("crud")),

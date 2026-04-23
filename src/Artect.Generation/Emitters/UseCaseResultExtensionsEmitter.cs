@@ -5,15 +5,11 @@ namespace Artect.Generation.Emitters;
 
 /// <summary>
 /// Emits <c>UseCaseResultExtensions.cs</c> into <c>src/&lt;Project&gt;.Api/</c>.
-/// Only runs when <c>cfg.EmitUseCaseInteractors == true</c>.
 /// </summary>
 public sealed class UseCaseResultExtensionsEmitter : IEmitter
 {
     public IReadOnlyList<EmittedFile> Emit(EmitterContext ctx)
     {
-        if (!ctx.Config.EmitUseCaseInteractors)
-            return System.Array.Empty<EmittedFile>();
-
         var project   = ctx.Config.ProjectName;
         var apiNs     = CleanLayout.ApiNamespace(project);
         var ucNs      = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
