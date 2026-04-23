@@ -32,8 +32,15 @@ public sealed class SlnEmitter : IEmitter
 
         if (cfg.IncludeTestsProject)
         {
-            csprojPaths.Add(
-                $"{CleanLayout.TestsDir(project)}/{CleanLayout.TestsProjectName(project)}.csproj");
+            var domainTests  = $"{project}.Domain.Tests";
+            var appTests     = $"{project}.Application.Tests";
+            var infraTests   = $"{project}.Infrastructure.Tests";
+            var apiTests     = $"{project}.Api.Tests";
+
+            csprojPaths.Add($"tests/{domainTests}/{domainTests}.csproj");
+            csprojPaths.Add($"tests/{appTests}/{appTests}.csproj");
+            csprojPaths.Add($"tests/{infraTests}/{infraTests}.csproj");
+            csprojPaths.Add($"tests/{apiTests}/{apiTests}.csproj");
         }
 
         var projectTypeGuid = "{" + CsharpSdkProjectTypeGuid + "}";
