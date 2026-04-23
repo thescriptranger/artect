@@ -51,6 +51,7 @@ public sealed class EntityCommandEmitter : IEmitter
         {
             Namespace = CleanLayout.ApplicationCommandsNamespace(ctx.Config.ProjectName),
             CommonNamespace = CleanLayout.ApplicationCommonNamespace(ctx.Config.ProjectName),
+            ModelsNamespace = CleanLayout.ApplicationModelsNamespace(ctx.Config.ProjectName),
             CommandName = commandName,
             PayloadType = payload,
             Properties = columns.Select(c => new

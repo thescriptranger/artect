@@ -3,6 +3,7 @@ using {{ CommandsNamespace }};
 
 namespace {{ Namespace }};
 
+{{# if EmitCreate }}
 public sealed partial class Create{{ EntityName }}CommandValidator : IValidator<Create{{ EntityName }}Command>
 {
     public ValidationResult Validate(Create{{ EntityName }}Command request)
@@ -14,6 +15,8 @@ public sealed partial class Create{{ EntityName }}CommandValidator : IValidator<
         return errors.Count == 0 ? ValidationResult.Success() : ValidationResult.Fail(errors.ToArray());
     }
 }
+{{/if}}
+{{# if EmitUpdate }}
 
 public sealed partial class Update{{ EntityName }}CommandValidator : IValidator<Update{{ EntityName }}Command>
 {
@@ -26,6 +29,8 @@ public sealed partial class Update{{ EntityName }}CommandValidator : IValidator<
         return errors.Count == 0 ? ValidationResult.Success() : ValidationResult.Fail(errors.ToArray());
     }
 }
+{{/if}}
+{{# if EmitPatch }}
 
 public sealed partial class Patch{{ EntityName }}CommandValidator : IValidator<Patch{{ EntityName }}Command>
 {
@@ -38,3 +43,4 @@ public sealed partial class Patch{{ EntityName }}CommandValidator : IValidator<P
         return errors.Count == 0 ? ValidationResult.Success() : ValidationResult.Fail(errors.ToArray());
     }
 }
+{{/if}}

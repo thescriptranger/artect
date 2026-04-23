@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
+using Artect.Config;
 using Artect.Core.Schema;
 using Artect.Naming;
 using Artect.Templating;
@@ -12,6 +13,15 @@ public sealed class ValidatorEmitter : IEmitter
 {
     public IReadOnlyList<EmittedFile> Emit(EmitterContext ctx)
     {
+        var crud       = ctx.Config.Crud;
+        var emitCreate = crud.HasFlag(CrudOperation.Post);
+        var emitUpdate = crud.HasFlag(CrudOperation.Put);
+        var emitPatch  = crud.HasFlag(CrudOperation.Patch);
+
+        // No command-producing ops enabled → no validators to generate.
+        if (!emitCreate && !emitUpdate && !emitPatch)
+            return System.Array.Empty<EmittedFile>();
+
         var template = TemplateParser.Parse(ctx.Templates.Load("Validator.cs.artect"));
         var list = new List<EmittedFile>();
 
@@ -36,10 +46,12 @@ public sealed class ValidatorEmitter : IEmitter
                 EntityName        = entity.EntityTypeName,
                 CreateBodyLines   = createBodyLines,
                 UpdateBodyLines   = updateBodyLines,
+                EmitCreate        = emitCreate,
+                EmitUpdate        = emitUpdate,
+                EmitPatch         = emitPatch,
             };
 
             var rendered = Renderer.Render(template, data);
-            // Two classes in one file — use the entity name as the class name prefix
             var path = CleanLayout.ValidatorPath(ctx.Config.ProjectName, $"{entity.EntityTypeName}CommandValidators");
             list.Add(new EmittedFile(path, rendered));
         }
