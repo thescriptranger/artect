@@ -19,7 +19,7 @@ public sealed class CsProjEmitter : IEmitter
         return new[]
         {
             EmitApi(project, tfm, cfg),
-            EmitApplication(project, tfm),
+            EmitApplication(project, tfm, cfg),
             EmitDomain(project, tfm),
             EmitInfrastructure(project, tfm, cfg),
             EmitShared(project, tfm),
@@ -84,14 +84,23 @@ public sealed class CsProjEmitter : IEmitter
 
     // ── Application ──────────────────────────────────────────────────────────
 
-    static EmittedFile EmitApplication(string project, string tfm)
+    static EmittedFile EmitApplication(string project, string tfm, ArtectConfig cfg)
     {
+        var major = cfg.TargetFramework.MajorVersion();
         var sb = new StringBuilder();
         sb.AppendLine("<Project Sdk=\"Microsoft.NET.Sdk\">");
         sb.AppendLine();
         sb.AppendLine("  <PropertyGroup>");
         sb.AppendLine(SharedProps(tfm));
         sb.AppendLine("  </PropertyGroup>");
+        sb.AppendLine();
+        sb.AppendLine("  <ItemGroup>");
+        // Needed for IServiceCollection + AddScoped/AddSingleton/AddTransient extensions
+        // used by the emitted ApplicationServiceCollectionExtensions installer.
+        sb.AppendLine(PackageRef("Microsoft.Extensions.DependencyInjection.Abstractions", $"{major}.0.*"));
+        // Needed for IAppLogger<T> adapter + LoggingBehavior decorator (ILogger types).
+        sb.AppendLine(PackageRef("Microsoft.Extensions.Logging.Abstractions", $"{major}.0.*"));
+        sb.AppendLine("  </ItemGroup>");
         sb.AppendLine();
         sb.AppendLine("  <ItemGroup>");
         sb.AppendLine(ProjectRef($"../{CleanLayout.DomainProjectName(project)}/{CleanLayout.DomainProjectName(project)}.csproj"));
