@@ -1,3 +1,4 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: ProgramCs.cs.artect
-// Purpose (from plan): WebApplication.CreateBuilder, OpenAPI, Scalar, DbContext/connection factory DI, repository DI (when on), validator DI, auth DI, versioning DI, Map<Plural>Endpoints() per entity, app.Run().
+// This file is intentionally minimal.
+// ProgramCsEmitter builds Program.cs via StringBuilder and loads auth/versioning
+// fragments (AuthJwt.cs.artect, AuthAuth0.cs.artect, etc.) via ctx.Templates.Load().
+// The main template is not used for rendering; the emitter owns the full structure.

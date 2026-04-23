@@ -1,3 +1,20 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: AuthJwt.cs.artect
-// Purpose (from plan): fragment template included by ProgramCs for JWT authentication; placeholders throw at startup when unset.
+builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme    = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.Authority = builder.Configuration["Jwt:Issuer"]
+            ?? throw new InvalidOperationException("Missing configuration key 'Jwt:Issuer'. Set it in appsettings.json or environment variables.");
+        options.Audience  = builder.Configuration["Jwt:Audience"]
+            ?? throw new InvalidOperationException("Missing configuration key 'Jwt:Audience'. Set it in appsettings.json or environment variables.");
+        options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+        {
+            ValidateIssuer           = true,
+            ValidateAudience         = true,
+            ValidateLifetime         = true,
+            ValidateIssuerSigningKey = true,
+        };
+    });
+builder.Services.AddAuthorization();

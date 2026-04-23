@@ -1,3 +1,22 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: AuthAuth0.cs.artect
-// Purpose (from plan): fragment template included by ProgramCs for Auth0 authentication; placeholders throw at startup when unset.
+builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme    = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        var domain = builder.Configuration["Auth0:Domain"]
+            ?? throw new InvalidOperationException("Missing configuration key 'Auth0:Domain'. Set it in appsettings.json or environment variables.");
+        options.Authority = $"https://{domain}/";
+        options.Audience  = builder.Configuration["Auth0:Audience"]
+            ?? throw new InvalidOperationException("Missing configuration key 'Auth0:Audience'. Set it in appsettings.json or environment variables.");
+        options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+        {
+            ValidateIssuer           = true,
+            ValidateAudience         = true,
+            ValidateLifetime         = true,
+            ValidateIssuerSigningKey = true,
+            NameClaimType            = System.Security.Claims.ClaimTypes.NameIdentifier,
+        };
+    });
+builder.Services.AddAuthorization();

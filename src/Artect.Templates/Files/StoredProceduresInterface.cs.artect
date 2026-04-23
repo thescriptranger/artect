@@ -1,3 +1,2 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: StoredProceduresInterface.cs.artect
-// Purpose (from plan): IStoredProcedures (or one per schema when PartitionStoredProceduresBySchema); typed parameter and result classes inline or as siblings.
+// This file is intentionally minimal.
+// StoredProceduresEmitter builds IStoredProcedures and its implementation via StringBuilder.

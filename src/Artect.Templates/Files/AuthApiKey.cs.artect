@@ -1,3 +1,4 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: AuthApiKey.cs.artect
-// Purpose (from plan): fragment template included by ProgramCs for API key authentication; placeholders throw at startup when unset.
+builder.Services.AddAuthentication("ApiKey")
+    .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(
+        "ApiKey", options => { });
+builder.Services.AddAuthorization();

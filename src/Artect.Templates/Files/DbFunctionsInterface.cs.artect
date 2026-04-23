@@ -1,3 +1,2 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: DbFunctionsInterface.cs.artect
-// Purpose (from plan): IDbFunctions with signatures; bodies throw NotImplementedException.
+// This file is intentionally minimal.
+// DbFunctionsEmitter builds IDbFunctions and its implementation via StringBuilder.

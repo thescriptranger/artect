@@ -1,3 +1,7 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: VersioningUrlSegment.cs.artect
-// Purpose (from plan): fragment template included by ProgramCs for URL segment versioning.
+builder.Services.AddApiVersioning(options =>
+{
+    options.DefaultApiVersion                   = new Asp.Versioning.ApiVersion(1, 0);
+    options.AssumeDefaultVersionWhenUnspecified = true;
+    options.ReportApiVersions                   = true;
+    options.ApiVersionReader                    = new Asp.Versioning.UrlSegmentApiVersionReader();
+});

@@ -1,3 +1,13 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: AuthAzureAd.cs.artect
-// Purpose (from plan): fragment template included by ProgramCs for Azure AD authentication; placeholders throw at startup when unset.
+builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme)
+    .AddMicrosoftIdentityWebApi(options =>
+    {
+        builder.Configuration.Bind("AzureAd", options);
+        var tenantId = builder.Configuration["AzureAd:TenantId"]
+            ?? throw new InvalidOperationException("Missing configuration key 'AzureAd:TenantId'. Set it in appsettings.json or environment variables.");
+        var clientId = builder.Configuration["AzureAd:ClientId"]
+            ?? throw new InvalidOperationException("Missing configuration key 'AzureAd:ClientId'. Set it in appsettings.json or environment variables.");
+    }, identityOptions =>
+    {
+        builder.Configuration.Bind("AzureAd", identityOptions);
+    });
+builder.Services.AddAuthorization();
