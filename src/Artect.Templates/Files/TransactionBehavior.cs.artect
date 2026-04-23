@@ -1,0 +1,29 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using {{ CommonNamespace }};
+using {{ PortsNamespace }};
+using {{ UseCasesNamespace }};
+
+namespace {{ Namespace }};
+
+public sealed class TransactionBehavior<TRequest, TPayload> : IUseCase<TRequest, UseCaseResult<TPayload>>
+    where TRequest : ICommand
+{
+    readonly IUseCase<TRequest, UseCaseResult<TPayload>> _inner;
+    readonly IUnitOfWork _uow;
+
+    public TransactionBehavior(IUseCase<TRequest, UseCaseResult<TPayload>> inner, IUnitOfWork uow)
+    {
+        _inner = inner;
+        _uow = uow;
+    }
+
+    public async Task<UseCaseResult<TPayload>> ExecuteAsync(TRequest request, CancellationToken ct)
+    {
+        var result = await _inner.ExecuteAsync(request, ct).ConfigureAwait(false);
+        if (result is UseCaseResult<TPayload>.Success)
+            await _uow.CommitAsync(ct).ConfigureAwait(false);
+        return result;
+    }
+}

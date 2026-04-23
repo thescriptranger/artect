@@ -1,12 +1,11 @@
 using System.Collections.Generic;
-using {{ RequestsNamespace }};
-using {{ ErrorsNamespace }};
+using {{ CommandsNamespace }};
 
 namespace {{ Namespace }};
 
-public sealed partial class Create{{ EntityName }}RequestValidator : IValidator<Create{{ EntityName }}Request>
+public sealed partial class Create{{ EntityName }}CommandValidator : IValidator<Create{{ EntityName }}Command>
 {
-    public ValidationResult Validate(Create{{ EntityName }}Request request)
+    public ValidationResult Validate(Create{{ EntityName }}Command request)
     {
         var errors = new List<ValidationError>();
 {{# for line in CreateBodyLines }}
@@ -16,9 +15,21 @@ public sealed partial class Create{{ EntityName }}RequestValidator : IValidator<
     }
 }
 
-public sealed partial class Update{{ EntityName }}RequestValidator : IValidator<Update{{ EntityName }}Request>
+public sealed partial class Update{{ EntityName }}CommandValidator : IValidator<Update{{ EntityName }}Command>
 {
-    public ValidationResult Validate(Update{{ EntityName }}Request request)
+    public ValidationResult Validate(Update{{ EntityName }}Command request)
+    {
+        var errors = new List<ValidationError>();
+{{# for line in UpdateBodyLines }}
+        {{ line.Text }}
+{{/for}}
+        return errors.Count == 0 ? ValidationResult.Success() : ValidationResult.Fail(errors.ToArray());
+    }
+}
+
+public sealed partial class Patch{{ EntityName }}CommandValidator : IValidator<Patch{{ EntityName }}Command>
+{
+    public ValidationResult Validate(Patch{{ EntityName }}Command request)
     {
         var errors = new List<ValidationError>();
 {{# for line in UpdateBodyLines }}

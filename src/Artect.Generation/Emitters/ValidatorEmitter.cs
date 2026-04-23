@@ -15,8 +15,7 @@ public sealed class ValidatorEmitter : IEmitter
         var template = TemplateParser.Parse(ctx.Templates.Load("Validator.cs.artect"));
         var list = new List<EmittedFile>();
 
-        var requestsNs = $"{CleanLayout.SharedNamespace(ctx.Config.ProjectName)}.Requests";
-        var errorsNs   = $"{CleanLayout.SharedNamespace(ctx.Config.ProjectName)}.Errors";
+        var commandsNs = CleanLayout.ApplicationCommandsNamespace(ctx.Config.ProjectName);
         var validatorNs = $"{CleanLayout.ApplicationNamespace(ctx.Config.ProjectName)}.Validators";
 
         foreach (var entity in ctx.Model.Entities)
@@ -32,8 +31,7 @@ public sealed class ValidatorEmitter : IEmitter
 
             var data = new
             {
-                RequestsNamespace = requestsNs,
-                ErrorsNamespace   = errorsNs,
+                CommandsNamespace = commandsNs,
                 Namespace         = validatorNs,
                 EntityName        = entity.EntityTypeName,
                 CreateBodyLines   = createBodyLines,
@@ -42,7 +40,7 @@ public sealed class ValidatorEmitter : IEmitter
 
             var rendered = Renderer.Render(template, data);
             // Two classes in one file — use the entity name as the class name prefix
-            var path = CleanLayout.ValidatorPath(ctx.Config.ProjectName, $"{entity.EntityTypeName}RequestValidators");
+            var path = CleanLayout.ValidatorPath(ctx.Config.ProjectName, $"{entity.EntityTypeName}CommandValidators");
             list.Add(new EmittedFile(path, rendered));
         }
 

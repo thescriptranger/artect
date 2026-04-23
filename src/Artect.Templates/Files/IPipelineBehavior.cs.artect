@@ -1,0 +1,10 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace {{ Namespace }};
+
+public interface IPipelineBehavior<TRequest, TResult>
+{
+    Task<TResult> HandleAsync(TRequest request, Func<Task<TResult>> next, CancellationToken ct);
+}

@@ -25,6 +25,7 @@ public sealed class ApplicationCommonEmitter : IEmitter
             RenderCommon("ICommand.cs.artect", "ICommand"),
             RenderCommon("IQuery.cs.artect", "IQuery"),
             RenderCommon("IUseCase.cs.artect", "IUseCase"),
+            RenderCommon("IPipelineBehavior.cs.artect", "IPipelineBehavior"),
             RenderCommon("Unit.cs.artect", "Unit"),
             RenderCommon("PagedResult.cs.artect", "PagedResult"),
             new EmittedFile(

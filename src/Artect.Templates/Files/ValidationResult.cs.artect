@@ -1,6 +1,12 @@
-using {{ ErrorsNamespace }};
-
 namespace {{ Namespace }};
+
+/// <summary>
+/// Structured validation error produced by <c>IValidator&lt;T&gt;</c> implementations.
+/// Distinct from the wire-level <c>ValidationError</c> in the Shared layer — pipeline behaviors
+/// translate instances of this type into <c>ApplicationError</c> before returning through the
+/// use-case result channel.
+/// </summary>
+public sealed record ValidationError(string Field, string Code, string Message);
 
 public sealed class ValidationResult
 {

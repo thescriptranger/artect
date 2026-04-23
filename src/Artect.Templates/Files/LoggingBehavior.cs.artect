@@ -1,0 +1,38 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using {{ CommonNamespace }};
+using {{ PortsNamespace }};
+
+namespace {{ Namespace }};
+
+public sealed class LoggingBehavior<TRequest, TResult> : IUseCase<TRequest, TResult>
+{
+    readonly IUseCase<TRequest, TResult> _inner;
+    readonly IAppLogger<TRequest> _logger;
+
+    public LoggingBehavior(IUseCase<TRequest, TResult> inner, IAppLogger<TRequest> logger)
+    {
+        _inner = inner;
+        _logger = logger;
+    }
+
+    public async Task<TResult> ExecuteAsync(TRequest request, CancellationToken ct)
+    {
+        var started = DateTime.UtcNow;
+        _logger.Information("Executing {RequestType}", typeof(TRequest).Name);
+        try
+        {
+            var result = await _inner.ExecuteAsync(request, ct).ConfigureAwait(false);
+            var elapsed = DateTime.UtcNow - started;
+            _logger.Information("Completed {RequestType} in {ElapsedMs}ms", typeof(TRequest).Name, elapsed.TotalMilliseconds);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            var elapsed = DateTime.UtcNow - started;
+            _logger.Error(ex, "Failed {RequestType} after {ElapsedMs}ms", typeof(TRequest).Name, elapsed.TotalMilliseconds);
+            throw;
+        }
+    }
+}

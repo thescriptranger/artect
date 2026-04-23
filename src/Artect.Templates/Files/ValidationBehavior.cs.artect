@@ -1,0 +1,31 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using {{ ValidatorsNamespace }};
+using {{ ErrorsNamespace }};
+using {{ UseCasesNamespace }};
+
+namespace {{ Namespace }};
+
+public sealed class ValidationBehavior<TRequest, TPayload> : IUseCase<TRequest, UseCaseResult<TPayload>>
+{
+    readonly IUseCase<TRequest, UseCaseResult<TPayload>> _inner;
+    readonly IValidator<TRequest>? _validator;
+
+    public ValidationBehavior(IUseCase<TRequest, UseCaseResult<TPayload>> inner, IValidator<TRequest>? validator)
+    {
+        _inner = inner;
+        _validator = validator;
+    }
+
+    public Task<UseCaseResult<TPayload>> ExecuteAsync(TRequest request, CancellationToken ct)
+    {
+        if (_validator is null) return _inner.ExecuteAsync(request, ct);
+        var result = _validator.Validate(request);
+        if (result.IsValid) return _inner.ExecuteAsync(request, ct);
+        var errors = result.Errors.Select(e => new ApplicationError(e.Field, e.Code, e.Message)).ToArray();
+        return Task.FromResult<UseCaseResult<TPayload>>(new UseCaseResult<TPayload>.ValidationFailed(errors));
+    }
+}

@@ -65,12 +65,14 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         var entityName = entity.EntityTypeName;
 
         var endpointNs = $"{project}.Api.Endpoints";
-        var ucAbsNs    = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.UseCases";
         var reqNs      = CleanLayout.SharedRequestsNamespace(project);
         var respNs     = CleanLayout.SharedResponsesNamespace(project);
         var mapNs      = CleanLayout.ApiMappingNamespace(project);
         var commonNs   = CleanLayout.ApplicationCommonNamespace(project);
         var modelsNs   = CleanLayout.ApplicationModelsNamespace(project);
+        var commandsNs = CleanLayout.ApplicationCommandsNamespace(project);
+        var queriesNs  = CleanLayout.ApplicationQueriesNamespace(project);
+        var ucNs       = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
 
         // PK route segment(s)
         var pk = entity.Table.PrimaryKey!;
@@ -78,7 +80,7 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         var pkRouteSegments = BuildPkRouteSegments(entity); // e.g. "/{id}" or "/{id}/{sub}"
 
         var hasWrite = (crud & (CrudOperation.Post | CrudOperation.Put | CrudOperation.Patch)) != 0;
-        var hasList  = (crud & CrudOperation.GetList) != 0;
+        var hasQuery = (crud & (CrudOperation.GetList | CrudOperation.GetById)) != 0;
 
         var sb = new StringBuilder();
         sb.AppendLine("using System.Linq;");
@@ -86,13 +88,21 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         sb.AppendLine("using Microsoft.AspNetCore.Http;");
         sb.AppendLine("using Microsoft.AspNetCore.Routing;");
         sb.AppendLine($"using {commonNs};");
-        if (hasList)
-            sb.AppendLine($"using {modelsNs};");
+        sb.AppendLine($"using {modelsNs};");
         if (hasWrite)
+        {
             sb.AppendLine($"using {reqNs};");
+            sb.AppendLine($"using {commandsNs};");
+        }
+        else if ((crud & CrudOperation.Delete) != 0)
+        {
+            sb.AppendLine($"using {commandsNs};");
+        }
+        if (hasQuery)
+            sb.AppendLine($"using {queriesNs};");
         sb.AppendLine($"using {respNs};");
         sb.AppendLine($"using {mapNs};");
-        sb.AppendLine($"using {ucAbsNs};");
+        sb.AppendLine($"using {ucNs};");
         sb.AppendLine();
         sb.AppendLine($"namespace {endpointNs};");
         sb.AppendLine();
@@ -106,7 +116,7 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         if ((crud & CrudOperation.GetList) != 0)
         {
             // List: PagedResult<EntityModel> → PagedResponse<EntityResponse>
-            sb.AppendLine($"        group.MapGet(\"/\", async (IList{plural}UseCase useCase, int? page, int? pageSize, System.Threading.CancellationToken ct) =>");
+            sb.AppendLine($"        group.MapGet(\"/\", async (IUseCase<List{plural}Query, UseCaseResult<PagedResult<{entityName}Model>>> useCase, int? page, int? pageSize, System.Threading.CancellationToken ct) =>");
             sb.AppendLine($"            (await useCase.ExecuteAsync({entityName}ApiMappers.ToListQuery(page ?? 1, pageSize ?? 50), ct)).ToIResult(m => new PagedResponse<{entityName}Response>");
             sb.AppendLine("            {");
             sb.AppendLine("                Items = m.Items.Select(x => x.ToResponse()).ToArray(),");
@@ -119,35 +129,35 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
 
         if ((crud & CrudOperation.GetById) != 0)
         {
-            sb.AppendLine($"        group.MapGet(\"{pkRouteSegments}\", async ({pkRouteParams}, IGet{entityName}ByIdUseCase useCase, System.Threading.CancellationToken ct) =>");
+            sb.AppendLine($"        group.MapGet(\"{pkRouteSegments}\", async ({pkRouteParams}, IUseCase<Get{entityName}ByIdQuery, UseCaseResult<{entityName}Model>> useCase, System.Threading.CancellationToken ct) =>");
             sb.AppendLine($"            (await useCase.ExecuteAsync({entityName}ApiMappers.ToGetByIdQuery({BuildPkArgNames(entity)}), ct)).ToIResult(m => m.ToResponse()));");
             sb.AppendLine();
         }
 
         if ((crud & CrudOperation.Post) != 0)
         {
-            sb.AppendLine($"        group.MapPost(\"/\", async (Create{entityName}Request request, ICreate{entityName}UseCase useCase, System.Threading.CancellationToken ct) =>");
+            sb.AppendLine($"        group.MapPost(\"/\", async (Create{entityName}Request request, IUseCase<Create{entityName}Command, UseCaseResult<{entityName}Model>> useCase, System.Threading.CancellationToken ct) =>");
             sb.AppendLine($"            (await useCase.ExecuteAsync(request.ToCommand(), ct)).ToIResult(m => m.ToResponse()));");
             sb.AppendLine();
         }
 
         if ((crud & CrudOperation.Put) != 0)
         {
-            sb.AppendLine($"        group.MapPut(\"{pkRouteSegments}\", async ({pkRouteParams}, Update{entityName}Request request, IUpdate{entityName}UseCase useCase, System.Threading.CancellationToken ct) =>");
+            sb.AppendLine($"        group.MapPut(\"{pkRouteSegments}\", async ({pkRouteParams}, Update{entityName}Request request, IUseCase<Update{entityName}Command, UseCaseResult<Unit>> useCase, System.Threading.CancellationToken ct) =>");
             sb.AppendLine($"            (await useCase.ExecuteAsync(request.ToUpdateCommand({BuildPkArgNames(entity)}), ct)).ToIResult());");
             sb.AppendLine();
         }
 
         if ((crud & CrudOperation.Patch) != 0)
         {
-            sb.AppendLine($"        group.MapPatch(\"{pkRouteSegments}\", async ({pkRouteParams}, Update{entityName}Request request, IPatch{entityName}UseCase useCase, System.Threading.CancellationToken ct) =>");
+            sb.AppendLine($"        group.MapPatch(\"{pkRouteSegments}\", async ({pkRouteParams}, Update{entityName}Request request, IUseCase<Patch{entityName}Command, UseCaseResult<Unit>> useCase, System.Threading.CancellationToken ct) =>");
             sb.AppendLine($"            (await useCase.ExecuteAsync(request.ToPatchCommand({BuildPkArgNames(entity)}), ct)).ToIResult());");
             sb.AppendLine();
         }
 
         if ((crud & CrudOperation.Delete) != 0)
         {
-            sb.AppendLine($"        group.MapDelete(\"{pkRouteSegments}\", async ({pkRouteParams}, IDelete{entityName}UseCase useCase, System.Threading.CancellationToken ct) =>");
+            sb.AppendLine($"        group.MapDelete(\"{pkRouteSegments}\", async ({pkRouteParams}, IUseCase<Delete{entityName}Command, UseCaseResult<Unit>> useCase, System.Threading.CancellationToken ct) =>");
             sb.AppendLine($"            (await useCase.ExecuteAsync({entityName}ApiMappers.ToDeleteCommand({BuildPkArgNames(entity)}), ct)).ToIResult());");
             sb.AppendLine();
         }
@@ -162,12 +172,12 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
     static string BuildListOnlyEndpoints(EmitterContext ctx, string entityName, string plural, string route, string project)
     {
         var endpointNs = $"{project}.Api.Endpoints";
-        var ucAbsNs    = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.UseCases";
         var respNs     = CleanLayout.SharedResponsesNamespace(project);
         var mapNs      = CleanLayout.ApiMappingNamespace(project);
         var commonNs   = CleanLayout.ApplicationCommonNamespace(project);
         var modelsNs   = CleanLayout.ApplicationModelsNamespace(project);
         var queriesNs  = CleanLayout.ApplicationQueriesNamespace(project);
+        var ucNs       = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
 
         var sb = new StringBuilder();
         sb.AppendLine("using System.Linq;");
@@ -179,7 +189,7 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         sb.AppendLine($"using {queriesNs};");
         sb.AppendLine($"using {respNs};");
         sb.AppendLine($"using {mapNs};");
-        sb.AppendLine($"using {ucAbsNs};");
+        sb.AppendLine($"using {ucNs};");
         sb.AppendLine();
         sb.AppendLine($"namespace {endpointNs};");
         sb.AppendLine();
@@ -190,7 +200,7 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         sb.AppendLine("    {");
         sb.AppendLine($"        var group = app.MapGroup(\"/api/{{version?}}/{route}\");");
         sb.AppendLine();
-        sb.AppendLine($"        group.MapGet(\"/\", async (IList{plural}UseCase useCase, int? page, int? pageSize, System.Threading.CancellationToken ct) =>");
+        sb.AppendLine($"        group.MapGet(\"/\", async (IUseCase<List{plural}Query, UseCaseResult<PagedResult<{entityName}Model>>> useCase, int? page, int? pageSize, System.Threading.CancellationToken ct) =>");
         sb.AppendLine($"            (await useCase.ExecuteAsync(new List{plural}Query(page ?? 1, pageSize ?? 50), ct)).ToIResult(m => new PagedResponse<{entityName}Response>");
         sb.AppendLine("            {");
         sb.AppendLine("                Items = m.Items.Select(x => x.ToResponse()).ToArray(),");

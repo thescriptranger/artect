@@ -8,15 +8,27 @@ using Artect.Naming;
 namespace Artect.Generation.Emitters;
 
 /// <summary>
-/// Emits per-entity-per-operation use-case interface + implementation pairs.
+/// Emits per-entity-per-operation interactor implementation classes.
 /// Entities with PK get full CRUD interactors; pk-less tables and views get List-only.
+/// <para>
 /// Post-Phase C: interactors take Application-internal <c>Command</c>/<c>Query</c> types and return
 /// Application-internal <c>Model</c> payloads wrapped in <c>UseCaseResult&lt;T&gt;</c>. Domain factory
 /// <c>&lt;Entity&gt;.Create(...)</c> is invoked on creates; repositories project to <c>&lt;Entity&gt;Model</c>.
 /// No imports from <c>&lt;Project&gt;.Shared.*</c>.
+/// </para>
+/// <para>
 /// Phase E: when <c>cfg.SplitRepositoriesByIntent == true</c>, Query interactors inject only
 /// <c>I&lt;Entity&gt;ReadRepository</c>; Command interactors inject <c>I&lt;Entity&gt;WriteRepository</c>
 /// (Create) or both Read + Write (Update/Patch/Delete).
+/// </para>
+/// <para>
+/// Phase F: validation and UoW commit have moved out of interactors into
+/// <c>ValidationBehavior</c> and <c>TransactionBehavior</c> pipeline decorators. Interactors no
+/// longer inject <c>IValidator&lt;T&gt;</c> or <c>IUnitOfWork</c>. Named marker interfaces
+/// <c>I&lt;Op&gt;&lt;Entity&gt;UseCase</c> are no longer emitted — endpoints and the installer
+/// wire against the generic <c>IUseCase&lt;TRequest, UseCaseResult&lt;TPayload&gt;&gt;</c>
+/// contract so decorator chains compose without cast gymnastics.
+/// </para>
 /// </summary>
 public sealed class UseCaseInteractorEmitter : IEmitter
 {
@@ -66,22 +78,22 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         var pkType     = PkClrType(entity.Table);
 
         if ((crud & CrudOperation.GetList) != 0)
-            list.AddRange(EmitListInteractor(project, entityName, plural, split));
+            list.Add(EmitListInteractor(project, entityName, plural, split));
 
         if ((crud & CrudOperation.GetById) != 0)
-            list.AddRange(EmitGetByIdInteractor(project, entityName, entity, split));
+            list.Add(EmitGetByIdInteractor(project, entityName, entity, split));
 
         if ((crud & CrudOperation.Post) != 0)
-            list.AddRange(EmitCreateInteractor(project, entity, split));
+            list.Add(EmitCreateInteractor(project, entity, split));
 
         if ((crud & CrudOperation.Put) != 0)
-            list.AddRange(EmitUpdateInteractor(project, entity, pkType, "Update", split));
+            list.Add(EmitUpdateInteractor(project, entity, pkType, "Update", split));
 
         if ((crud & CrudOperation.Patch) != 0)
-            list.AddRange(EmitPatchInteractor(project, entity, pkType, split));
+            list.Add(EmitPatchInteractor(project, entity, pkType, split));
 
         if ((crud & CrudOperation.Delete) != 0)
-            list.AddRange(EmitDeleteInteractor(project, entity, pkType, split));
+            list.Add(EmitDeleteInteractor(project, entity, pkType, split));
     }
 
     static void EmitListOnlyInteractors(
@@ -92,18 +104,19 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         string project,
         bool split)
     {
-        list.AddRange(EmitListInteractor(project, typeName, plural, split));
+        list.Add(EmitListInteractor(project, typeName, plural, split));
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // Per-op emitters — each returns [interfaceFile, implFile]
+    // Per-op emitters — each returns a single implementation file.
+    // Named marker interfaces (I<Op><Entity>UseCase) are intentionally NOT emitted
+    // since Phase F's decorator chain composes against IUseCase<,> directly.
     // ──────────────────────────────────────────────────────────────────────────
 
-    static IEnumerable<EmittedFile> EmitListInteractor(string project, string entityName, string plural, bool split)
+    static EmittedFile EmitListInteractor(string project, string entityName, string plural, bool split)
     {
         var opName    = $"List{plural}";
         var queryName = $"List{plural}Query";
-        var ifaceNs   = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.UseCases";
         var implNs    = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
         var repoAbsNs = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
         var ucNs      = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
@@ -111,23 +124,6 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         var modelsNs  = CleanLayout.ApplicationModelsNamespace(project);
         var queriesNs = CleanLayout.ApplicationQueriesNamespace(project);
 
-        // Interface
-        var iface = new StringBuilder();
-        iface.AppendLine($"using System.Threading;");
-        iface.AppendLine($"using System.Threading.Tasks;");
-        iface.AppendLine($"using {commonNs};");
-        iface.AppendLine($"using {modelsNs};");
-        iface.AppendLine($"using {queriesNs};");
-        iface.AppendLine($"using {ucNs};");
-        iface.AppendLine();
-        iface.AppendLine($"namespace {ifaceNs};");
-        iface.AppendLine();
-        iface.AppendLine($"public interface I{opName}UseCase");
-        iface.AppendLine("{");
-        iface.AppendLine($"    Task<UseCaseResult<PagedResult<{entityName}Model>>> ExecuteAsync({queryName} query, CancellationToken ct);");
-        iface.AppendLine("}");
-
-        // Implementation
         var repoFieldType = split ? $"I{entityName}ReadRepository" : $"I{entityName}Repository";
         var repoParamName = split ? "read" : "repo";
         var repoFieldName = split ? "_read" : "_repo";
@@ -139,11 +135,10 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         impl.AppendLine($"using {commonNs};");
         impl.AppendLine($"using {modelsNs};");
         impl.AppendLine($"using {queriesNs};");
-        impl.AppendLine($"using {ifaceNs};");
         impl.AppendLine();
         impl.AppendLine($"namespace {implNs};");
         impl.AppendLine();
-        impl.AppendLine($"public sealed class {opName}UseCase : I{opName}UseCase");
+        impl.AppendLine($"public sealed class {opName}UseCase : IUseCase<{queryName}, UseCaseResult<PagedResult<{entityName}Model>>>");
         impl.AppendLine("{");
         impl.AppendLine($"    readonly {repoFieldType} {repoFieldName};");
         impl.AppendLine();
@@ -161,15 +156,13 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         impl.AppendLine("    }");
         impl.AppendLine("}");
 
-        yield return new EmittedFile(CleanLayout.UseCaseInterfacePath(project, opName), iface.ToString());
-        yield return new EmittedFile(CleanLayout.UseCaseImplPath(project, opName), impl.ToString());
+        return new EmittedFile(CleanLayout.UseCaseImplPath(project, opName), impl.ToString());
     }
 
-    static IEnumerable<EmittedFile> EmitGetByIdInteractor(string project, string entityName, NamedEntity entity, bool split)
+    static EmittedFile EmitGetByIdInteractor(string project, string entityName, NamedEntity entity, bool split)
     {
         var opName    = $"Get{entityName}ById";
         var queryName = $"Get{entityName}ByIdQuery";
-        var ifaceNs   = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.UseCases";
         var implNs    = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
         var repoAbsNs = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
         var ucNs      = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
@@ -185,23 +178,6 @@ public sealed class UseCaseInteractorEmitter : IEmitter
             ? $"query.{EntityNaming.PropertyName(pkCols[0])}.ToString()!"
             : "$\"(" + string.Join(", ", pkCols.Select(c => $"{{query.{EntityNaming.PropertyName(c)}}}")) + ")\"";
 
-        // Interface
-        var iface = new StringBuilder();
-        iface.AppendLine($"using System.Threading;");
-        iface.AppendLine($"using System.Threading.Tasks;");
-        iface.AppendLine($"using {commonNs};");
-        iface.AppendLine($"using {modelsNs};");
-        iface.AppendLine($"using {queriesNs};");
-        iface.AppendLine($"using {ucNs};");
-        iface.AppendLine();
-        iface.AppendLine($"namespace {ifaceNs};");
-        iface.AppendLine();
-        iface.AppendLine($"public interface I{opName}UseCase");
-        iface.AppendLine("{");
-        iface.AppendLine($"    Task<UseCaseResult<{entityName}Model>> ExecuteAsync({queryName} query, CancellationToken ct);");
-        iface.AppendLine("}");
-
-        // Implementation
         var repoFieldType = split ? $"I{entityName}ReadRepository" : $"I{entityName}Repository";
         var repoParamName = split ? "read" : "repo";
         var repoFieldName = split ? "_read" : "_repo";
@@ -213,12 +189,10 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         impl.AppendLine($"using {commonNs};");
         impl.AppendLine($"using {modelsNs};");
         impl.AppendLine($"using {queriesNs};");
-        impl.AppendLine($"using {ifaceNs};");
-        impl.AppendLine($"using {ucNs};");
         impl.AppendLine();
         impl.AppendLine($"namespace {implNs};");
         impl.AppendLine();
-        impl.AppendLine($"public sealed class {opName}UseCase : I{opName}UseCase");
+        impl.AppendLine($"public sealed class {opName}UseCase : IUseCase<{queryName}, UseCaseResult<{entityName}Model>>");
         impl.AppendLine("{");
         impl.AppendLine($"    readonly {repoFieldType} {repoFieldName};");
         impl.AppendLine();
@@ -236,16 +210,14 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         impl.AppendLine("    }");
         impl.AppendLine("}");
 
-        yield return new EmittedFile(CleanLayout.UseCaseInterfacePath(project, opName), iface.ToString());
-        yield return new EmittedFile(CleanLayout.UseCaseImplPath(project, opName), impl.ToString());
+        return new EmittedFile(CleanLayout.UseCaseImplPath(project, opName), impl.ToString());
     }
 
-    static IEnumerable<EmittedFile> EmitCreateInteractor(string project, NamedEntity entity, bool split)
+    static EmittedFile EmitCreateInteractor(string project, NamedEntity entity, bool split)
     {
         var entityName = entity.EntityTypeName;
         var opName     = $"Create{entityName}";
         var commandName = $"Create{entityName}Command";
-        var ifaceNs    = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.UseCases";
         var implNs     = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
         var repoAbsNs  = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
         var entityNs   = $"{CleanLayout.DomainNamespace(project)}.Entities";
@@ -255,33 +227,14 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         var modelsNs   = CleanLayout.ApplicationModelsNamespace(project);
         var commandsNs = CleanLayout.ApplicationCommandsNamespace(project);
         var errorsNs   = CleanLayout.ApplicationErrorsNamespace(project);
-        var portsNs    = CleanLayout.PortsNamespace(project);
 
         var factoryArgs = entity.Table.Columns.Where(c => !c.IsServerGenerated).ToList();
         var factoryArgExpr = string.Join(", ", factoryArgs.Select(c => $"command.{EntityNaming.PropertyName(c)}"));
 
-        // Interface
-        var iface = new StringBuilder();
-        iface.AppendLine($"using System.Threading;");
-        iface.AppendLine($"using System.Threading.Tasks;");
-        iface.AppendLine($"using {commonNs};");
-        iface.AppendLine($"using {modelsNs};");
-        iface.AppendLine($"using {commandsNs};");
-        iface.AppendLine($"using {ucNs};");
-        iface.AppendLine();
-        iface.AppendLine($"namespace {ifaceNs};");
-        iface.AppendLine();
-        iface.AppendLine($"public interface I{opName}UseCase");
-        iface.AppendLine("{");
-        iface.AppendLine($"    Task<UseCaseResult<{entityName}Model>> ExecuteAsync({commandName} command, CancellationToken ct);");
-        iface.AppendLine("}");
-
-        // Implementation — Create only needs Write
         var impl = new StringBuilder();
         impl.AppendLine($"using System.Linq;");
         impl.AppendLine($"using System.Threading;");
         impl.AppendLine($"using System.Threading.Tasks;");
-        impl.AppendLine($"using {portsNs};");
         impl.AppendLine($"using {repoAbsNs};");
         impl.AppendLine($"using {entityNs};");
         impl.AppendLine($"using {domainCommonNs};");
@@ -289,33 +242,27 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         impl.AppendLine($"using {errorsNs};");
         impl.AppendLine($"using {modelsNs};");
         impl.AppendLine($"using {commandsNs};");
-        impl.AppendLine($"using {ifaceNs};");
-        impl.AppendLine($"using {ucNs};");
         impl.AppendLine();
         impl.AppendLine($"namespace {implNs};");
         impl.AppendLine();
-        impl.AppendLine($"public sealed class {opName}UseCase : I{opName}UseCase");
+        impl.AppendLine($"public sealed class {opName}UseCase : IUseCase<{commandName}, UseCaseResult<{entityName}Model>>");
         impl.AppendLine("{");
         if (split)
         {
             impl.AppendLine($"    readonly I{entityName}WriteRepository _write;");
-            impl.AppendLine("    readonly IUnitOfWork _uow;");
             impl.AppendLine();
-            impl.AppendLine($"    public {opName}UseCase(I{entityName}WriteRepository write, IUnitOfWork uow)");
+            impl.AppendLine($"    public {opName}UseCase(I{entityName}WriteRepository write)");
             impl.AppendLine("    {");
             impl.AppendLine("        _write = write;");
-            impl.AppendLine("        _uow = uow;");
             impl.AppendLine("    }");
         }
         else
         {
             impl.AppendLine($"    readonly I{entityName}Repository _repo;");
-            impl.AppendLine("    readonly IUnitOfWork _uow;");
             impl.AppendLine();
-            impl.AppendLine($"    public {opName}UseCase(I{entityName}Repository repo, IUnitOfWork uow)");
+            impl.AppendLine($"    public {opName}UseCase(I{entityName}Repository repo)");
             impl.AppendLine("    {");
             impl.AppendLine("        _repo = repo;");
-            impl.AppendLine("        _uow = uow;");
             impl.AppendLine("    }");
         }
         impl.AppendLine();
@@ -333,34 +280,29 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         if (split)
         {
             impl.AppendLine("        var model = await _write.CreateAsync(entity, ct).ConfigureAwait(false);");
-            impl.AppendLine("        await _uow.CommitAsync(ct).ConfigureAwait(false);");
         }
         else
         {
             impl.AppendLine("        var model = await _repo.CreateAsync(entity, ct).ConfigureAwait(false);");
-            impl.AppendLine("        await _uow.CommitAsync(ct).ConfigureAwait(false);");
         }
         impl.AppendLine($"        return new UseCaseResult<{entityName}Model>.Success(model);");
         impl.AppendLine("    }");
         impl.AppendLine("}");
 
-        yield return new EmittedFile(CleanLayout.UseCaseInterfacePath(project, opName), iface.ToString());
-        yield return new EmittedFile(CleanLayout.UseCaseImplPath(project, opName), impl.ToString());
+        return new EmittedFile(CleanLayout.UseCaseImplPath(project, opName), impl.ToString());
     }
 
-    static IEnumerable<EmittedFile> EmitUpdateInteractor(string project, NamedEntity entity, string pkType, string verb, bool split)
+    static EmittedFile EmitUpdateInteractor(string project, NamedEntity entity, string pkType, string verb, bool split)
     {
         var entityName = entity.EntityTypeName;
         var opName     = $"{verb}{entityName}";
         var commandName = $"{verb}{entityName}Command";
-        var ifaceNs    = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.UseCases";
         var implNs     = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
         var repoAbsNs  = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
         var entityNs   = $"{CleanLayout.DomainNamespace(project)}.Entities";
         var ucNs       = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
         var commonNs   = CleanLayout.ApplicationCommonNamespace(project);
         var commandsNs = CleanLayout.ApplicationCommandsNamespace(project);
-        var portsNs    = CleanLayout.PortsNamespace(project);
 
         var pk = entity.Table.PrimaryKey!;
         var pkNames = pk.ColumnNames.ToHashSet(System.StringComparer.OrdinalIgnoreCase);
@@ -368,59 +310,36 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         var pkProp = EntityNaming.PropertyName(pkCol);
         var allCols = entity.Table.Columns.ToList();
 
-        // Interface
-        var iface = new StringBuilder();
-        iface.AppendLine($"using System.Threading;");
-        iface.AppendLine($"using System.Threading.Tasks;");
-        iface.AppendLine($"using {commonNs};");
-        iface.AppendLine($"using {commandsNs};");
-        iface.AppendLine($"using {ucNs};");
-        iface.AppendLine();
-        iface.AppendLine($"namespace {ifaceNs};");
-        iface.AppendLine();
-        iface.AppendLine($"public interface I{opName}UseCase");
-        iface.AppendLine("{");
-        iface.AppendLine($"    Task<UseCaseResult<Unit>> ExecuteAsync({commandName} command, CancellationToken ct);");
-        iface.AppendLine("}");
-
-        // Implementation — Update/Patch need both Read + Write
         var impl = new StringBuilder();
         impl.AppendLine($"using System.Threading;");
         impl.AppendLine($"using System.Threading.Tasks;");
-        impl.AppendLine($"using {portsNs};");
         impl.AppendLine($"using {repoAbsNs};");
         impl.AppendLine($"using {entityNs};");
         impl.AppendLine($"using {commonNs};");
         impl.AppendLine($"using {commandsNs};");
-        impl.AppendLine($"using {ifaceNs};");
-        impl.AppendLine($"using {ucNs};");
         impl.AppendLine();
         impl.AppendLine($"namespace {implNs};");
         impl.AppendLine();
-        impl.AppendLine($"public sealed class {opName}UseCase : I{opName}UseCase");
+        impl.AppendLine($"public sealed class {opName}UseCase : IUseCase<{commandName}, UseCaseResult<Unit>>");
         impl.AppendLine("{");
         if (split)
         {
             impl.AppendLine($"    readonly I{entityName}ReadRepository _read;");
             impl.AppendLine($"    readonly I{entityName}WriteRepository _write;");
-            impl.AppendLine("    readonly IUnitOfWork _uow;");
             impl.AppendLine();
-            impl.AppendLine($"    public {opName}UseCase(I{entityName}ReadRepository read, I{entityName}WriteRepository write, IUnitOfWork uow)");
+            impl.AppendLine($"    public {opName}UseCase(I{entityName}ReadRepository read, I{entityName}WriteRepository write)");
             impl.AppendLine("    {");
             impl.AppendLine("        _read = read;");
             impl.AppendLine("        _write = write;");
-            impl.AppendLine("        _uow = uow;");
             impl.AppendLine("    }");
         }
         else
         {
             impl.AppendLine($"    readonly I{entityName}Repository _repo;");
-            impl.AppendLine("    readonly IUnitOfWork _uow;");
             impl.AppendLine();
-            impl.AppendLine($"    public {opName}UseCase(I{entityName}Repository repo, IUnitOfWork uow)");
+            impl.AppendLine($"    public {opName}UseCase(I{entityName}Repository repo)");
             impl.AppendLine("    {");
             impl.AppendLine("        _repo = repo;");
-            impl.AppendLine("        _uow = uow;");
             impl.AppendLine("    }");
         }
         impl.AppendLine();
@@ -452,32 +371,28 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         {
             impl.AppendLine("        await _repo.UpdateAsync(updated, ct).ConfigureAwait(false);");
         }
-        impl.AppendLine("        await _uow.CommitAsync(ct).ConfigureAwait(false);");
         impl.AppendLine("        return new UseCaseResult<Unit>.Success(Unit.Value);");
         impl.AppendLine("    }");
         impl.AppendLine("}");
 
-        yield return new EmittedFile(CleanLayout.UseCaseInterfacePath(project, opName), iface.ToString());
-        yield return new EmittedFile(CleanLayout.UseCaseImplPath(project, opName), impl.ToString());
+        return new EmittedFile(CleanLayout.UseCaseImplPath(project, opName), impl.ToString());
     }
 
-    static IEnumerable<EmittedFile> EmitPatchInteractor(string project, NamedEntity entity, string pkType, bool split)
+    static EmittedFile EmitPatchInteractor(string project, NamedEntity entity, string pkType, bool split)
     {
         return EmitUpdateInteractor(project, entity, pkType, "Patch", split);
     }
 
-    static IEnumerable<EmittedFile> EmitDeleteInteractor(string project, NamedEntity entity, string pkType, bool split)
+    static EmittedFile EmitDeleteInteractor(string project, NamedEntity entity, string pkType, bool split)
     {
         var entityName  = entity.EntityTypeName;
         var opName      = $"Delete{entityName}";
         var commandName = $"Delete{entityName}Command";
-        var ifaceNs     = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.UseCases";
         var implNs      = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
         var repoAbsNs   = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
         var ucNs        = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
         var commonNs    = CleanLayout.ApplicationCommonNamespace(project);
         var commandsNs  = CleanLayout.ApplicationCommandsNamespace(project);
-        var portsNs     = CleanLayout.PortsNamespace(project);
 
         var pk = entity.Table.PrimaryKey!;
         var pkNames = pk.ColumnNames.ToHashSet(System.StringComparer.OrdinalIgnoreCase);
@@ -489,58 +404,35 @@ public sealed class UseCaseInteractorEmitter : IEmitter
             ? $"command.{EntityNaming.PropertyName(pkCols[0])}.ToString()!"
             : "$\"(" + string.Join(", ", pkCols.Select(c => $"{{command.{EntityNaming.PropertyName(c)}}}")) + ")\"";
 
-        // Interface
-        var iface = new StringBuilder();
-        iface.AppendLine($"using System.Threading;");
-        iface.AppendLine($"using System.Threading.Tasks;");
-        iface.AppendLine($"using {commonNs};");
-        iface.AppendLine($"using {commandsNs};");
-        iface.AppendLine($"using {ucNs};");
-        iface.AppendLine();
-        iface.AppendLine($"namespace {ifaceNs};");
-        iface.AppendLine();
-        iface.AppendLine($"public interface I{opName}UseCase");
-        iface.AppendLine("{");
-        iface.AppendLine($"    Task<UseCaseResult<Unit>> ExecuteAsync({commandName} command, CancellationToken ct);");
-        iface.AppendLine("}");
-
-        // Implementation — Delete needs both Read (existence check) + Write
         var impl = new StringBuilder();
         impl.AppendLine($"using System.Threading;");
         impl.AppendLine($"using System.Threading.Tasks;");
-        impl.AppendLine($"using {portsNs};");
         impl.AppendLine($"using {repoAbsNs};");
         impl.AppendLine($"using {commonNs};");
         impl.AppendLine($"using {commandsNs};");
-        impl.AppendLine($"using {ifaceNs};");
-        impl.AppendLine($"using {ucNs};");
         impl.AppendLine();
         impl.AppendLine($"namespace {implNs};");
         impl.AppendLine();
-        impl.AppendLine($"public sealed class {opName}UseCase : I{opName}UseCase");
+        impl.AppendLine($"public sealed class {opName}UseCase : IUseCase<{commandName}, UseCaseResult<Unit>>");
         impl.AppendLine("{");
         if (split)
         {
             impl.AppendLine($"    readonly I{entityName}ReadRepository _read;");
             impl.AppendLine($"    readonly I{entityName}WriteRepository _write;");
-            impl.AppendLine("    readonly IUnitOfWork _uow;");
             impl.AppendLine();
-            impl.AppendLine($"    public {opName}UseCase(I{entityName}ReadRepository read, I{entityName}WriteRepository write, IUnitOfWork uow)");
+            impl.AppendLine($"    public {opName}UseCase(I{entityName}ReadRepository read, I{entityName}WriteRepository write)");
             impl.AppendLine("    {");
             impl.AppendLine("        _read = read;");
             impl.AppendLine("        _write = write;");
-            impl.AppendLine("        _uow = uow;");
             impl.AppendLine("    }");
         }
         else
         {
             impl.AppendLine($"    readonly I{entityName}Repository _repo;");
-            impl.AppendLine("    readonly IUnitOfWork _uow;");
             impl.AppendLine();
-            impl.AppendLine($"    public {opName}UseCase(I{entityName}Repository repo, IUnitOfWork uow)");
+            impl.AppendLine($"    public {opName}UseCase(I{entityName}Repository repo)");
             impl.AppendLine("    {");
             impl.AppendLine("        _repo = repo;");
-            impl.AppendLine("        _uow = uow;");
             impl.AppendLine("    }");
         }
         impl.AppendLine();
@@ -564,13 +456,11 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         {
             impl.AppendLine($"        await _repo.DeleteAsync({pkArgExpr}, ct).ConfigureAwait(false);");
         }
-        impl.AppendLine("        await _uow.CommitAsync(ct).ConfigureAwait(false);");
         impl.AppendLine("        return new UseCaseResult<Unit>.Success(Unit.Value);");
         impl.AppendLine("    }");
         impl.AppendLine("}");
 
-        yield return new EmittedFile(CleanLayout.UseCaseInterfacePath(project, opName), iface.ToString());
-        yield return new EmittedFile(CleanLayout.UseCaseImplPath(project, opName), impl.ToString());
+        return new EmittedFile(CleanLayout.UseCaseImplPath(project, opName), impl.ToString());
     }
 
     // ──────────────────────────────────────────────────────────────────────────
