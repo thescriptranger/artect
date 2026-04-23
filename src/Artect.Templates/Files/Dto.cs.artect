@@ -1,8 +1,8 @@
 namespace {{ Namespace }};
 
-public sealed class {{ EntityName }}Dto
+public sealed record {{ EntityName }}Dto
 {
 {{# for col in Columns }}
-    public {{ col.ClrTypeWithNullability }} {{ col.PropertyName }} { get; set; }{{ col.Initializer }}
+    public {{ col.ClrTypeWithNullability }} {{ col.PropertyName }} { get; init; }{{ col.Initializer }}
 {{/for}}
 }

@@ -341,8 +341,8 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         impl.AppendLine("        var existing = await _repo.GetByIdAsync(id, ct).ConfigureAwait(false);");
         impl.AppendLine("        if (existing is null)");
         impl.AppendLine($"            return new UseCaseResult.NotFound(\"{entityName}\", id.ToString()!);");
-        impl.AppendLine("        existing.ApplyUpdate(request);");
-        impl.AppendLine("        await _repo.UpdateAsync(existing, ct).ConfigureAwait(false);");
+        impl.AppendLine("        var updated = existing.Update(request);");
+        impl.AppendLine("        await _repo.UpdateAsync(updated, ct).ConfigureAwait(false);");
         impl.AppendLine("        return new UseCaseResult.Success();");
         impl.AppendLine("    }");
         impl.AppendLine("}");

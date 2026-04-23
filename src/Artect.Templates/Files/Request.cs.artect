@@ -1,8 +1,8 @@
 namespace {{ Namespace }};
 
-public sealed class {{ Kind }}{{ EntityName }}Request
+public sealed record {{ Kind }}{{ EntityName }}Request
 {
 {{# for prop in Properties }}
-    public {{ prop.ClrTypeWithNullability }} {{ prop.PropertyName }} { get; set; }{{ prop.Initializer }}
+    public {{ prop.ClrTypeWithNullability }} {{ prop.PropertyName }} { get; init; }{{ prop.Initializer }}
 {{/for}}
 }

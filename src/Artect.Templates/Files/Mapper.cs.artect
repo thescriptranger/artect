@@ -49,14 +49,14 @@ public static partial class {{ EntityName }}Mappings
 {{/for}}
     };
 
-    /// <summary>Applies a <see cref="Update{{ EntityName }}Request"/> patch onto an existing <see cref="{{ EntityName }}Dto"/>.</summary>
+    /// <summary>Returns a new <see cref="{{ EntityName }}Dto"/> with fields from <see cref="Update{{ EntityName }}Request"/> applied.</summary>
     public static {{ EntityName }}Dto Update(this {{ EntityName }}Dto dto, Update{{ EntityName }}Request request)
-    {
+        => dto with
+        {
 {{# for col in NonPkColumns }}
-        dto.{{ col.PropertyName }} = request.{{ col.PropertyName }};
+            {{ col.PropertyName }} = request.{{ col.PropertyName }},
 {{/for}}
-        return dto;
-    }
+        };
 
     static partial void OnMapped({{ EntityName }} entity, {{ EntityName }}Dto dto);
     static partial void OnMapped({{ EntityName }}Dto dto, {{ EntityName }}Response response);
