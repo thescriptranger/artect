@@ -6,6 +6,12 @@ namespace Artect.Console;
 
 public sealed class Prompt
 {
+    // ANSI control sequences. Relative cursor movement only — absolute
+    // SetCursorPosition is fragile under buffer scrolling.
+    const string CursorUp      = "[{0}A"; // format with N lines
+    const string EraseLine     = "\r[2K";  // carriage return + erase entire line
+    const string EraseToEnd    = "[0J";    // erase from cursor to end of screen
+
     readonly IConsoleIO _io;
     readonly bool _interactive;
 
@@ -63,62 +69,63 @@ public sealed class Prompt
     }
 
     // ── Interactive (arrow-key) single-select ────────────────────────────────
+    //
+    // Layout after Draw:
+    //   line Q:   question           ← written before Draw
+    //   line Q+1: instruction        ← written before Draw
+    //   line Q+2: option 0
+    //   ...
+    //   line Q+1+N: option N-1
+    //   line Q+2+N: cursor (1 below last option)
+    //
+    // To redraw: up N lines, rewrite options. Cursor returns to same position.
+    // To collapse: up (N+1) lines (past options + instruction), erase to end, write summary.
 
     T InteractiveSingle<T>(string question, IReadOnlyList<T> options, T defaultValue, Func<T, string> label)
     {
         var comparer = EqualityComparer<T>.Default;
-        int cursor = 0;
-        for (int i = 0; i < options.Count; i++)
-            if (comparer.Equals(options[i], defaultValue)) { cursor = i; break; }
+        int cursor = IndexOf(options, defaultValue, comparer);
+        int count = options.Count;
 
         System.Console.WriteLine(Ansi.Colour(question, Ansi.Cyan));
         System.Console.WriteLine(Ansi.Colour("(↑/↓ to move, Enter to confirm)", Ansi.Dim));
-        int startLine = System.Console.CursorTop;
-        // Reserve space by printing blank lines, then we'll overwrite.
-        for (int i = 0; i < options.Count; i++) System.Console.WriteLine();
-        DrawSingle(options, cursor, defaultValue, label, startLine);
+        DrawSingle(options, cursor, defaultValue, label);
 
         while (true)
         {
             var key = System.Console.ReadKey(intercept: true);
             if (key.Key == ConsoleKey.UpArrow)
-                cursor = (cursor - 1 + options.Count) % options.Count;
+                cursor = (cursor - 1 + count) % count;
             else if (key.Key == ConsoleKey.DownArrow)
-                cursor = (cursor + 1) % options.Count;
+                cursor = (cursor + 1) % count;
             else if (key.Key == ConsoleKey.Enter)
                 break;
             else if (key.Key == ConsoleKey.Escape)
             { cursor = IndexOf(options, defaultValue, comparer); break; }
             else
                 continue;
-            DrawSingle(options, cursor, defaultValue, label, startLine);
+
+            System.Console.Write(string.Format(CursorUp, count));
+            DrawSingle(options, cursor, defaultValue, label);
         }
 
-        // Collapse the menu: overwrite each option line with a blank line, then print summary.
-        System.Console.SetCursorPosition(0, startLine);
-        for (int i = 0; i < options.Count; i++) System.Console.WriteLine(ClearLine());
-        System.Console.SetCursorPosition(0, startLine);
+        // Collapse menu: replace (instruction + N options) with single summary line.
+        System.Console.Write(string.Format(CursorUp, count + 1));
+        System.Console.Write(EraseToEnd);
         System.Console.WriteLine($"  → {Ansi.Colour(label(options[cursor]), Ansi.Green)}");
         return options[cursor];
     }
 
-    static int IndexOf<T>(IReadOnlyList<T> options, T value, EqualityComparer<T> comparer)
-    {
-        for (int i = 0; i < options.Count; i++) if (comparer.Equals(options[i], value)) return i;
-        return 0;
-    }
-
-    static void DrawSingle<T>(IReadOnlyList<T> options, int cursor, T defaultValue, Func<T, string> label, int startLine)
+    static void DrawSingle<T>(IReadOnlyList<T> options, int cursor, T defaultValue, Func<T, string> label)
     {
         var comparer = EqualityComparer<T>.Default;
         for (int i = 0; i < options.Count; i++)
         {
-            System.Console.SetCursorPosition(0, startLine + i);
+            System.Console.Write(EraseLine);
             bool isDefault = comparer.Equals(options[i], defaultValue);
             string marker = i == cursor ? "▶ " : "  ";
             string text = $"{marker}{label(options[i])}{(isDefault ? " (default)" : "")}";
-            string coloured = i == cursor ? Ansi.Colour(text, Ansi.Cyan) : text;
-            System.Console.Write(coloured + ClearLine());
+            System.Console.WriteLine(i == cursor ? Ansi.Colour(text, Ansi.Cyan) : text);
         }
     }
 
@@ -128,20 +135,19 @@ public sealed class Prompt
     {
         var selected = new HashSet<T>(defaults, EqualityComparer<T>.Default);
         int cursor = 0;
+        int count = options.Count;
 
         System.Console.WriteLine(Ansi.Colour(question, Ansi.Cyan));
         System.Console.WriteLine(Ansi.Colour("(↑/↓ to move, Space to toggle, Enter to confirm)", Ansi.Dim));
-        int startLine = System.Console.CursorTop;
-        for (int i = 0; i < options.Count; i++) System.Console.WriteLine();
-        DrawMulti(options, cursor, selected, label, startLine);
+        DrawMulti(options, cursor, selected, label);
 
         while (true)
         {
             var key = System.Console.ReadKey(intercept: true);
             if (key.Key == ConsoleKey.UpArrow)
-                cursor = (cursor - 1 + options.Count) % options.Count;
+                cursor = (cursor - 1 + count) % count;
             else if (key.Key == ConsoleKey.DownArrow)
-                cursor = (cursor + 1) % options.Count;
+                cursor = (cursor + 1) % count;
             else if (key.Key == ConsoleKey.Spacebar)
             {
                 if (!selected.Add(options[cursor])) selected.Remove(options[cursor]);
@@ -152,33 +158,37 @@ public sealed class Prompt
             { selected = new HashSet<T>(defaults, EqualityComparer<T>.Default); break; }
             else
                 continue;
-            DrawMulti(options, cursor, selected, label, startLine);
+
+            System.Console.Write(string.Format(CursorUp, count));
+            DrawMulti(options, cursor, selected, label);
         }
 
         var picked = options.Where(o => selected.Contains(o)).ToArray();
-        System.Console.SetCursorPosition(0, startLine);
-        for (int i = 0; i < options.Count; i++) System.Console.WriteLine(ClearLine());
-        System.Console.SetCursorPosition(0, startLine);
+        System.Console.Write(string.Format(CursorUp, count + 1));
+        System.Console.Write(EraseToEnd);
         var summary = picked.Length == 0 ? "(none)" : string.Join(", ", picked.Select(label));
         System.Console.WriteLine($"  → {Ansi.Colour(summary, Ansi.Green)}");
         return picked;
     }
 
-    static void DrawMulti<T>(IReadOnlyList<T> options, int cursor, HashSet<T> selected, Func<T, string> label, int startLine)
+    static void DrawMulti<T>(IReadOnlyList<T> options, int cursor, HashSet<T> selected, Func<T, string> label)
     {
         for (int i = 0; i < options.Count; i++)
         {
-            System.Console.SetCursorPosition(0, startLine + i);
+            System.Console.Write(EraseLine);
             string marker = i == cursor ? "▶ " : "  ";
             string check = selected.Contains(options[i]) ? "[x]" : "[ ]";
             string text = $"{marker}{check} {label(options[i])}";
-            string coloured = i == cursor ? Ansi.Colour(text, Ansi.Cyan) : text;
-            System.Console.Write(coloured + ClearLine());
+            System.Console.WriteLine(i == cursor ? Ansi.Colour(text, Ansi.Cyan) : text);
         }
     }
 
-    // Clear rest of the current line; works on any VT-capable terminal.
-    static string ClearLine() => "[K";
+    static int IndexOf<T>(IReadOnlyList<T> options, T value, EqualityComparer<T> comparer)
+    {
+        for (int i = 0; i < options.Count; i++)
+            if (comparer.Equals(options[i], value)) return i;
+        return 0;
+    }
 
     // ── Numbered fallback (non-TTY / redirected input) ────────────────────────
 
