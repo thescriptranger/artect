@@ -1,3 +1,8 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: Enum.cs.artect
-// Purpose (from plan): single enum from CHECK IN constraint.
+namespace {{ Namespace }};
+
+public enum {{ EnumName }}
+{
+{{# for v in Values }}
+    {{ v }},
+{{/for}}
+}

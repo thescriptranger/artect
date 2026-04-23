@@ -1,3 +1,8 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: Dto.cs.artect
-// Purpose (from plan): entity DTO class; mirrors Entity with *Dto suffix, no navigations.
+namespace {{ Namespace }};
+
+public sealed class {{ EntityName }}Dto
+{
+{{# for col in Columns }}
+    public {{ col.ClrTypeWithNullability }} {{ col.PropertyName }} { get; set; }{{ col.Initializer }}
+{{/for}}
+}
