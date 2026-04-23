@@ -149,6 +149,7 @@ public sealed class CsProjEmitter : IEmitter
         sb.AppendLine("  </ItemGroup>");
         sb.AppendLine();
         sb.AppendLine("  <ItemGroup>");
+        sb.AppendLine(ProjectRef($"../{CleanLayout.ApplicationProjectName(project)}/{CleanLayout.ApplicationProjectName(project)}.csproj"));
         sb.AppendLine(ProjectRef($"../{CleanLayout.DomainProjectName(project)}/{CleanLayout.DomainProjectName(project)}.csproj"));
         sb.AppendLine("  </ItemGroup>");
         sb.AppendLine();
