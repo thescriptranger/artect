@@ -75,4 +75,11 @@ public static class CleanLayout
     public static string DomainNamespace(string root) => $"{root}.Domain";
     public static string InfrastructureNamespace(string root) => $"{root}.Infrastructure";
     public static string SharedNamespace(string root) => $"{root}.Shared";
+
+    // Phase D additions
+    public static string SharedRequestsNamespace(string root) => $"{root}.Shared.Requests";
+    public static string SharedResponsesNamespace(string root) => $"{root}.Shared.Responses";
+    public static string SharedErrorsNamespace(string root) => $"{root}.Shared.Errors";
+    public static string ApiMapperPath(string root, string className) => $"{ApiDir(root)}/Mapping/{className}.cs";
+    public static string ApiMappingNamespace(string root) => $"{root}.Api.Mapping";
 }
