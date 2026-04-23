@@ -60,6 +60,18 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
     // Full CRUD endpoints (entity has PK)
     // ──────────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Builds the route prefix for a MapGroup call. When API versioning is UrlSegment, a
+    /// <c>v{version:apiVersion}</c> segment is inserted; otherwise the path has no version
+    /// placeholder (Header / QueryString versioning plumbs the version outside the URL, and
+    /// None means no versioning at all — so a stray <c>{version?}</c> would show up in the
+    /// OpenAPI spec and prompt consumers like Scalar for a value that means nothing).
+    /// </summary>
+    static string BuildRoutePrefix(ApiVersioningKind versioning, string route)
+        => versioning == ApiVersioningKind.UrlSegment
+            ? $"/api/v{{version:apiVersion}}/{route}"
+            : $"/api/{route}";
+
     static string BuildFullEndpoints(EmitterContext ctx, NamedEntity entity, string plural, string route)
     {
         var project    = ctx.Config.ProjectName;
@@ -113,7 +125,7 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         sb.AppendLine("{");
         sb.AppendLine($"    public static IEndpointRouteBuilder Map{plural}Endpoints(this IEndpointRouteBuilder app)");
         sb.AppendLine("    {");
-        sb.AppendLine($"        var group = app.MapGroup(\"/api/{{version?}}/{route}\");");
+        sb.AppendLine($"        var group = app.MapGroup(\"{BuildRoutePrefix(ctx.Config.ApiVersioning, route)}\");");
         sb.AppendLine();
 
         if ((crud & CrudOperation.GetList) != 0)
@@ -201,7 +213,7 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         sb.AppendLine("{");
         sb.AppendLine($"    public static IEndpointRouteBuilder Map{plural}Endpoints(this IEndpointRouteBuilder app)");
         sb.AppendLine("    {");
-        sb.AppendLine($"        var group = app.MapGroup(\"/api/{{version?}}/{route}\");");
+        sb.AppendLine($"        var group = app.MapGroup(\"{BuildRoutePrefix(ctx.Config.ApiVersioning, route)}\");");
         sb.AppendLine();
         sb.AppendLine($"        group.MapGet(\"/\", async (IUseCase<List{plural}Query, UseCaseResult<PagedResult<{entityName}Model>>> useCase, int? page, int? pageSize, System.Threading.CancellationToken ct) =>");
         sb.AppendLine($"            (await useCase.ExecuteAsync(new List{plural}Query(page ?? 1, pageSize ?? 50), ct)).ToIResult(m => new PagedResponse<{entityName}Response>");

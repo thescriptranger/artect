@@ -253,15 +253,19 @@ public sealed class ServiceInstallerEmitter : IEmitter
         sb.AppendLine("    {");
 
         // ── Data access ───────────────────────────────────────────────────────
+        // Validate the connection string at installer-call time (app startup) so a missing
+        // or empty value fails fast with a clear message, rather than surfacing later as a
+        // "ConnectionString property has not been initialized" exception on the first query.
         sb.AppendLine("        // Data access");
+        sb.AppendLine("        var connectionString = configuration.GetConnectionString(\"DefaultConnection\");");
+        sb.AppendLine("        if (string.IsNullOrWhiteSpace(connectionString))");
+        sb.AppendLine("            throw new InvalidOperationException(");
+        sb.AppendLine("                \"Missing connection string 'DefaultConnection'. Set it in appsettings.json, \" +");
+        sb.AppendLine("                \"appsettings.Development.json, or the ConnectionStrings__DefaultConnection environment variable.\");");
+        sb.AppendLine();
         if (da == DataAccessKind.EfCore)
         {
-            sb.AppendLine($"        services.AddDbContext<{dbCtx}>(options =>");
-            sb.AppendLine("        {");
-            sb.AppendLine("            var connectionString = configuration.GetConnectionString(\"DefaultConnection\")");
-            sb.AppendLine("                ?? throw new InvalidOperationException(\"Missing connection string 'DefaultConnection' in configuration.\");");
-            sb.AppendLine("            options.UseSqlServer(connectionString);");
-            sb.AppendLine("        });");
+            sb.AppendLine($"        services.AddDbContext<{dbCtx}>(options => options.UseSqlServer(connectionString));");
         }
         else // Dapper
         {
