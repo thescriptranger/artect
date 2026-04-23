@@ -34,6 +34,7 @@ public static class EmitterRegistry
         new SlnEmitter(),
         new StoredProceduresEmitter(),
         new TestsProjectEmitter(),
+        new UnitOfWorkEmitter(),
         new UseCaseInteractorEmitter(),
         new UseCaseResultEmitter(),
         new UseCaseResultExtensionsEmitter(),

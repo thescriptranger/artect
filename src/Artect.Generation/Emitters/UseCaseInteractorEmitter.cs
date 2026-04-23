@@ -228,6 +228,7 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         var reqNs     = $"{CleanLayout.SharedNamespace(project)}.Requests";
         var ucNs      = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
         var mapNs     = $"{CleanLayout.ApplicationNamespace(project)}.Mappings";
+        var portsNs   = CleanLayout.PortsNamespace(project);
 
         // Interface
         var iface = new StringBuilder();
@@ -250,6 +251,7 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         var impl = new StringBuilder();
         impl.AppendLine($"using System.Threading;");
         impl.AppendLine($"using System.Threading.Tasks;");
+        impl.AppendLine($"using {portsNs};");
         impl.AppendLine($"using {repoAbsNs};");
         impl.AppendLine($"using {reqNs};");
         impl.AppendLine($"using {respNs};");
@@ -263,10 +265,12 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         impl.AppendLine($"public sealed class {opName}UseCase : I{opName}UseCase");
         impl.AppendLine("{");
         impl.AppendLine($"    readonly I{entityName}Repository _repo;");
+        impl.AppendLine("    readonly IUnitOfWork _uow;");
         impl.AppendLine();
-        impl.AppendLine($"    public {opName}UseCase(I{entityName}Repository repo)");
+        impl.AppendLine($"    public {opName}UseCase(I{entityName}Repository repo, IUnitOfWork uow)");
         impl.AppendLine("    {");
         impl.AppendLine("        _repo = repo;");
+        impl.AppendLine("        _uow = uow;");
         impl.AppendLine("    }");
         impl.AppendLine();
         impl.AppendLine($"    public async Task<UseCaseResult<{entityName}Response>> ExecuteAsync(Create{entityName}Request request, CancellationToken ct)");
@@ -276,6 +280,7 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         impl.AppendLine("        if (!validationResult.IsValid)");
         impl.AppendLine($"            return new UseCaseResult<{entityName}Response>.ValidationFailed(validationResult.Errors);");
         impl.AppendLine("        var dto = await _repo.CreateAsync(request.ToDto(), ct).ConfigureAwait(false);");
+        impl.AppendLine("        await _uow.CommitAsync(ct).ConfigureAwait(false);");
         impl.AppendLine($"        return new UseCaseResult<{entityName}Response>.Success(dto.ToResponse());");
         impl.AppendLine("    }");
         impl.AppendLine("}");
@@ -293,6 +298,7 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         var reqNs     = $"{CleanLayout.SharedNamespace(project)}.Requests";
         var ucNs      = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
         var mapNs     = $"{CleanLayout.ApplicationNamespace(project)}.Mappings";
+        var portsNs   = CleanLayout.PortsNamespace(project);
 
         // Interface
         var iface = new StringBuilder();
@@ -314,6 +320,7 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         var impl = new StringBuilder();
         impl.AppendLine($"using System.Threading;");
         impl.AppendLine($"using System.Threading.Tasks;");
+        impl.AppendLine($"using {portsNs};");
         impl.AppendLine($"using {repoAbsNs};");
         impl.AppendLine($"using {reqNs};");
         impl.AppendLine($"using {mapNs};");
@@ -326,10 +333,12 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         impl.AppendLine($"public sealed class {opName}UseCase : I{opName}UseCase");
         impl.AppendLine("{");
         impl.AppendLine($"    readonly I{entityName}Repository _repo;");
+        impl.AppendLine("    readonly IUnitOfWork _uow;");
         impl.AppendLine();
-        impl.AppendLine($"    public {opName}UseCase(I{entityName}Repository repo)");
+        impl.AppendLine($"    public {opName}UseCase(I{entityName}Repository repo, IUnitOfWork uow)");
         impl.AppendLine("    {");
         impl.AppendLine("        _repo = repo;");
+        impl.AppendLine("        _uow = uow;");
         impl.AppendLine("    }");
         impl.AppendLine();
         impl.AppendLine($"    public async Task<UseCaseResult> ExecuteAsync({pkType} id, Update{entityName}Request request, CancellationToken ct)");
@@ -343,6 +352,7 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         impl.AppendLine($"            return new UseCaseResult.NotFound(\"{entityName}\", id.ToString()!);");
         impl.AppendLine("        var updated = existing.Update(request);");
         impl.AppendLine("        await _repo.UpdateAsync(updated, ct).ConfigureAwait(false);");
+        impl.AppendLine("        await _uow.CommitAsync(ct).ConfigureAwait(false);");
         impl.AppendLine("        return new UseCaseResult.Success();");
         impl.AppendLine("    }");
         impl.AppendLine("}");
@@ -364,6 +374,7 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         var implNs    = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
         var repoAbsNs = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
         var ucNs      = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
+        var portsNs   = CleanLayout.PortsNamespace(project);
 
         // Interface
         var iface = new StringBuilder();
@@ -382,6 +393,7 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         var impl = new StringBuilder();
         impl.AppendLine($"using System.Threading;");
         impl.AppendLine($"using System.Threading.Tasks;");
+        impl.AppendLine($"using {portsNs};");
         impl.AppendLine($"using {repoAbsNs};");
         impl.AppendLine($"using {ifaceNs};");
         impl.AppendLine($"using {ucNs};");
@@ -391,10 +403,12 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         impl.AppendLine($"public sealed class {opName}UseCase : I{opName}UseCase");
         impl.AppendLine("{");
         impl.AppendLine($"    readonly I{entityName}Repository _repo;");
+        impl.AppendLine("    readonly IUnitOfWork _uow;");
         impl.AppendLine();
-        impl.AppendLine($"    public {opName}UseCase(I{entityName}Repository repo)");
+        impl.AppendLine($"    public {opName}UseCase(I{entityName}Repository repo, IUnitOfWork uow)");
         impl.AppendLine("    {");
         impl.AppendLine("        _repo = repo;");
+        impl.AppendLine("        _uow = uow;");
         impl.AppendLine("    }");
         impl.AppendLine();
         impl.AppendLine($"    public async Task<UseCaseResult> ExecuteAsync({pkType} id, CancellationToken ct)");
@@ -403,6 +417,7 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         impl.AppendLine("        if (existing is null)");
         impl.AppendLine($"            return new UseCaseResult.NotFound(\"{entityName}\", id.ToString()!);");
         impl.AppendLine("        await _repo.DeleteAsync(id, ct).ConfigureAwait(false);");
+        impl.AppendLine("        await _uow.CommitAsync(ct).ConfigureAwait(false);");
         impl.AppendLine("        return new UseCaseResult.Success();");
         impl.AppendLine("    }");
         impl.AppendLine("}");

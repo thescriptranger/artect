@@ -46,6 +46,12 @@ public sealed class EfRepositoryEmitter : IEmitter
                 string.Equals(c.Name, entity.Table.PrimaryKey!.ColumnNames[0],
                     System.StringComparison.OrdinalIgnoreCase)));
 
+        // When interactors are enabled the UnitOfWork owns the commit boundary,
+        // so the repository must NOT call SaveChangesAsync (that would double-commit).
+        // When interactors are disabled, endpoints call repos directly and there is
+        // no UoW in the call chain, so the repo must save its own changes.
+        var uowOwnsCommit = ctx.Config.EmitUseCaseInteractors;
+
         var ns          = $"{CleanLayout.InfrastructureNamespace(project)}.Repositories";
         var dataAbsNs   = $"{CleanLayout.InfrastructureNamespace(project)}.Data";
         var repoAbsNs   = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
@@ -110,7 +116,8 @@ public sealed class EfRepositoryEmitter : IEmitter
         sb.AppendLine("    {");
         sb.AppendLine("        var entity = dto.ToEntity();");
         sb.AppendLine($"        _db.{dbset}.Add(entity);");
-        sb.AppendLine("        await _db.SaveChangesAsync(ct).ConfigureAwait(false);");
+        if (!uowOwnsCommit)
+            sb.AppendLine("        await _db.SaveChangesAsync(ct).ConfigureAwait(false);");
         sb.AppendLine("        return entity.ToDto();");
         sb.AppendLine("    }");
         sb.AppendLine();
@@ -122,7 +129,8 @@ public sealed class EfRepositoryEmitter : IEmitter
         sb.AppendLine($"            .FirstOrDefaultAsync(e => e.{pkProp} == dto.{pkProp}, ct).ConfigureAwait(false);");
         sb.AppendLine("        if (entity is null) { return; }");
         sb.AppendLine("        entity.UpdateFromDto(dto);");
-        sb.AppendLine("        await _db.SaveChangesAsync(ct).ConfigureAwait(false);");
+        if (!uowOwnsCommit)
+            sb.AppendLine("        await _db.SaveChangesAsync(ct).ConfigureAwait(false);");
         sb.AppendLine("    }");
         sb.AppendLine();
 
@@ -133,7 +141,8 @@ public sealed class EfRepositoryEmitter : IEmitter
         sb.AppendLine($"            .FirstOrDefaultAsync(e => e.{pkProp} == id, ct).ConfigureAwait(false);");
         sb.AppendLine("        if (entity is null) { return; }");
         sb.AppendLine($"        _db.{dbset}.Remove(entity);");
-        sb.AppendLine("        await _db.SaveChangesAsync(ct).ConfigureAwait(false);");
+        if (!uowOwnsCommit)
+            sb.AppendLine("        await _db.SaveChangesAsync(ct).ConfigureAwait(false);");
         sb.AppendLine("    }");
 
         sb.AppendLine("}");

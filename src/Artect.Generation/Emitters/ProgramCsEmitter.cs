@@ -116,11 +116,17 @@ public sealed class ProgramCsEmitter : IEmitter
 
         // ── Logger port + clock DI (always registered) ───────────────────────
         {
-            var appPortsNs  = CleanLayout.PortsNamespace(project);
-            var infraLogNs  = CleanLayout.LoggingNamespace(project);
+            var appPortsNs = CleanLayout.PortsNamespace(project);
+            var infraLogNs = CleanLayout.LoggingNamespace(project);
             sb.AppendLine();
             sb.AppendLine($"builder.Services.AddScoped(typeof({appPortsNs}.IAppLogger<>), typeof({infraLogNs}.MicrosoftAppLogger<>));");
             sb.AppendLine($"builder.Services.AddSingleton(System.TimeProvider.System);");
+
+            // ── Unit of Work DI ───────────────────────────────────────────────
+            if (da == DataAccessKind.EfCore)
+                sb.AppendLine($"builder.Services.AddScoped<{appPortsNs}.IUnitOfWork, {infraDataNs}.EfUnitOfWork>();");
+            else
+                sb.AppendLine($"builder.Services.AddScoped<{appPortsNs}.IUnitOfWork, {infraDataNs}.DapperUnitOfWork>();");
         }
 
         // ── Repository DI (only when repos enabled) ───────────────────────────

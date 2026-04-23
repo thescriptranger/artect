@@ -1,0 +1,6 @@
+namespace {{ Namespace }};
+
+public interface IUnitOfWork
+{
+    System.Threading.Tasks.Task<int> CommitAsync(System.Threading.CancellationToken ct = default);
+}
