@@ -1,0 +1,26 @@
+{{# if HasUsingNamespaces }}
+{{# for ns in UsingNamespaces }}
+using {{ ns }};
+{{/for}}
+
+{{/if}}
+namespace {{ Namespace }};
+
+public sealed class {{ EntityName }}
+{
+{{# for col in Columns }}
+    public {{ col.ClrTypeWithNullability }} {{ col.PropertyName }} { get; set; }{{ col.Initializer }}
+{{/for}}
+{{# if HasReferenceNavigations }}
+
+{{# for nav in ReferenceNavigations }}
+    public {{ nav.TypeName }}? {{ nav.PropertyName }} { get; set; }
+{{/for}}
+{{/if}}
+{{# if HasCollectionNavigations }}
+
+{{# for nav in CollectionNavigations }}
+    public System.Collections.Generic.ICollection<{{ nav.TypeName }}> {{ nav.PropertyName }} { get; set; } = new System.Collections.Generic.List<{{ nav.TypeName }}>();
+{{/for}}
+{{/if}}
+}

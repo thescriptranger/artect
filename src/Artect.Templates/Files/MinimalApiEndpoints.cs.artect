@@ -1,0 +1,3 @@
+// STUB: filled in when the corresponding emitter is implemented in Phase 9.
+// Logical name: MinimalApiEndpoints.cs.artect
+// Purpose (from plan): static Map<Plural>Endpoints method with one MapGet/MapPost/etc. per enabled CRUD op; body depends on I<Entity>Repository when repositories are on, on DbContext/IDbConnectionFactory otherwise.

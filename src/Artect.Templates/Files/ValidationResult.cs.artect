@@ -1,0 +1,3 @@
+// STUB: filled in when the corresponding emitter is implemented in Phase 9.
+// Logical name: ValidationResult.cs.artect
+// Purpose (from plan): shared ValidationResult + ValidationError used by validators.

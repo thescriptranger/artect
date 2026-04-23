@@ -1,0 +1,3 @@
+// STUB: filled in when the corresponding emitter is implemented in Phase 9.
+// Logical name: Csproj.cs.artect
+// Purpose (from plan): five csproj variants (Api, Application, Domain, Infrastructure, Shared). TreatWarningsAsErrors=true, Nullable=enable.

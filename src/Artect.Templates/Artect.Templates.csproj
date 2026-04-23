@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <ProjectReference Include="..\Artect.Templating\Artect.Templating.csproj" />
+    <EmbeddedResource Include="Files/**/*.artect" />
   </ItemGroup>
 </Project>

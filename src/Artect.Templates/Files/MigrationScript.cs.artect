@@ -1,0 +1,3 @@
+// STUB: filled in when the corresponding emitter is implemented in Phase 9.
+// Logical name: MigrationScript.cs.artect
+// Purpose (from plan): PowerShell + bash variants; install dotnet-ef, dotnet ef migrations add InitialCreate, generate idempotent bootstrap SQL.

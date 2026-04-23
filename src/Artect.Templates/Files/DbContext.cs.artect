@@ -1,0 +1,3 @@
+// STUB: filled in when the corresponding emitter is implemented in Phase 9.
+// Logical name: DbContext.cs.artect
+// Purpose (from plan): DbSet<T> per entity (using schema-prefixed names from DbSetNaming when collided); OnModelCreating configures schemas, PKs, FKs, unique indexes, sequences; fully-qualified type references when entity names collide across schemas.

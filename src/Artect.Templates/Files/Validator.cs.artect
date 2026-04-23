@@ -1,0 +1,3 @@
+// STUB: filled in when the corresponding emitter is implemented in Phase 9.
+// Logical name: Validator.cs.artect
+// Purpose (from plan): imperative validator body with a Validate() method returning ValidationResult.

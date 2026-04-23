@@ -1,0 +1,3 @@
+// STUB: filled in when the corresponding emitter is implemented in Phase 9.
+// Logical name: AuthAzureAd.cs.artect
+// Purpose (from plan): fragment template included by ProgramCs for Azure AD authentication; placeholders throw at startup when unset.
