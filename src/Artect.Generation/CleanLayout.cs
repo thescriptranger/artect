@@ -21,7 +21,11 @@ public static class CleanLayout
     public static string ValidatorPath(string root, string className) => $"{ApplicationDir(root)}/Validators/{className}.cs";
     public static string MapperPath(string root, string entityName) => $"{ApplicationDir(root)}/Mappings/{entityName}Mappings.cs";
     public static string RepositoryInterfacePath(string root, string entityName) => $"{ApplicationDir(root)}/Abstractions/Repositories/I{entityName}Repository.cs";
+    public static string RepositoryReadInterfacePath(string root, string entityName) => $"{ApplicationDir(root)}/Abstractions/Repositories/I{entityName}ReadRepository.cs";
+    public static string RepositoryWriteInterfacePath(string root, string entityName) => $"{ApplicationDir(root)}/Abstractions/Repositories/I{entityName}WriteRepository.cs";
     public static string RepositoryImplPath(string root, string entityName) => $"{InfrastructureDir(root)}/Repositories/{entityName}Repository.cs";
+    public static string RepositoryReadImplPath(string root, string entityName) => $"{InfrastructureDir(root)}/Repositories/{entityName}ReadRepository.cs";
+    public static string RepositoryWriteImplPath(string root, string entityName) => $"{InfrastructureDir(root)}/Repositories/{entityName}WriteRepository.cs";
     public static string DbContextPath(string root, string className) => $"{InfrastructureDir(root)}/Data/{className}.cs";
     public static string ConnectionFactoryPath(string root) => $"{InfrastructureDir(root)}/Data/SqlDbConnectionFactory.cs";
     public static string EndpointPath(string root, string plural) => $"{ApiDir(root)}/Endpoints/{plural}Endpoints.cs";

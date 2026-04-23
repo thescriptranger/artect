@@ -215,10 +215,19 @@ public sealed class ServiceInstallerEmitter : IEmitter
             var sortedEntities = model.Entities
                 .Where(e => !e.IsJoinTable && e.HasPrimaryKey)
                 .OrderBy(e => e.EntityTypeName, System.StringComparer.Ordinal);
+            var splitRepos = cfg.SplitRepositoriesByIntent;
             foreach (var entity in sortedEntities)
             {
                 var name = entity.EntityTypeName;
-                sb.AppendLine($"        services.AddScoped<I{name}Repository, {name}Repository>();");
+                if (splitRepos)
+                {
+                    sb.AppendLine($"        services.AddScoped<I{name}ReadRepository, {name}ReadRepository>();");
+                    sb.AppendLine($"        services.AddScoped<I{name}WriteRepository, {name}WriteRepository>();");
+                }
+                else
+                {
+                    sb.AppendLine($"        services.AddScoped<I{name}Repository, {name}Repository>();");
+                }
             }
         }
 
