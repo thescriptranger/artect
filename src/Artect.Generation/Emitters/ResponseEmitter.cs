@@ -32,7 +32,7 @@ public sealed class ResponseEmitter : IEmitter
 
                 return new
                 {
-                    PropertyName = EntityNaming.PropertyName(c),
+                    PropertyName = EntityNaming.PropertyName(c, ctx.NamingCorrections),
                     ClrTypeWithNullability = clrTypeWithNullability,
                     Initializer = !c.IsNullable && c.ClrType == ClrType.String ? " = string.Empty;" : string.Empty,
                 };

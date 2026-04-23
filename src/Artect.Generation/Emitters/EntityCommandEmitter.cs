@@ -56,7 +56,7 @@ public sealed class EntityCommandEmitter : IEmitter
             Properties = columns.Select(c => new
             {
                 ClrTypeWithNullability = ClrTypeString(c),
-                PropertyName = Artect.Naming.EntityNaming.PropertyName(c),
+                PropertyName = Artect.Naming.EntityNaming.PropertyName(c, ctx.NamingCorrections),
                 Initializer = c.ClrType == ClrType.String && !c.IsNullable ? " = default!;" : string.Empty,
             }).ToList(),
         };

@@ -33,8 +33,8 @@ public sealed class EntityQueryEmitter : IEmitter
         // Views — list-only
         foreach (var view in ctx.Graph.Views)
         {
-            var typeName = CasingHelper.ToPascalCase(Pluralizer.Singularize(view.Name));
-            var plural   = CasingHelper.ToPascalCase(Pluralizer.Pluralize(Pluralizer.Singularize(view.Name)));
+            var typeName = CasingHelper.ToPascalCase(Pluralizer.Singularize(view.Name), ctx.NamingCorrections);
+            var plural   = CasingHelper.ToPascalCase(Pluralizer.Pluralize(Pluralizer.Singularize(view.Name)), ctx.NamingCorrections);
             if (ctx.Config.Crud.HasFlag(CrudOperation.GetList))
                 list.Add(BuildListQuery(ctx, template, typeName, plural));
         }
@@ -48,7 +48,7 @@ public sealed class EntityQueryEmitter : IEmitter
         var pk = entity.Table.PrimaryKey!;
         var pkNames = pk.ColumnNames.ToHashSet(System.StringComparer.OrdinalIgnoreCase);
         var pkCols = entity.Table.Columns.Where(c => pkNames.Contains(c.Name)).ToList();
-        var argList = "(" + string.Join(", ", pkCols.Select(c => $"{SqlTypeMap.ToCs(c.ClrType)} {Artect.Naming.EntityNaming.PropertyName(c)}")) + ")";
+        var argList = "(" + string.Join(", ", pkCols.Select(c => $"{SqlTypeMap.ToCs(c.ClrType)} {Artect.Naming.EntityNaming.PropertyName(c, ctx.NamingCorrections)}")) + ")";
         var data = new
         {
             Namespace = CleanLayout.ApplicationQueriesNamespace(ctx.Config.ProjectName),

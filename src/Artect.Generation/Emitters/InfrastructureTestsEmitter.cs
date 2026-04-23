@@ -80,7 +80,7 @@ public sealed class InfrastructureTestsEmitter : IEmitter
             yield return BuildMonolithicRepositoryTests(project, testsDir, entity);
         }
 
-        yield return BuildMappingTests(project, testsDir, entity);
+        yield return BuildMappingTests(project, testsDir, entity, ctx.NamingCorrections);
     }
 
     // ── Split: abstract contract for IEntityReadRepository ────────────────────
@@ -256,7 +256,7 @@ public sealed class InfrastructureTestsEmitter : IEmitter
 
     // ── EF mapping round-trip ──────────────────────────────────────────────────
 
-    static EmittedFile BuildMappingTests(string project, string testsDir, NamedEntity entity)
+    static EmittedFile BuildMappingTests(string project, string testsDir, NamedEntity entity, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var e = entity.EntityTypeName;
         var dbCtx = $"{project}DbContext";
@@ -266,11 +266,11 @@ public sealed class InfrastructureTestsEmitter : IEmitter
         var pk = entity.Table.PrimaryKey!;
         var pkNames = pk.ColumnNames.ToHashSet(System.StringComparer.OrdinalIgnoreCase);
         var pkCol = entity.Table.Columns.First(c => pkNames.Contains(c.Name));
-        var pkProp = EntityNaming.PropertyName(pkCol);
+        var pkProp = EntityNaming.PropertyName(pkCol, corrections);
 
         var nonGenCols = entity.Table.Columns.Where(c => !c.IsServerGenerated).ToList();
         var initBody = string.Join(", ",
-            nonGenCols.Select(c => $"{EntityNaming.PropertyName(c)} = {ValidPlaceholder(c)}"));
+            nonGenCols.Select(c => $"{EntityNaming.PropertyName(c, corrections)} = {ValidPlaceholder(c)}"));
 
         var sb = new StringBuilder();
         sb.AppendLine("using System.Linq;");

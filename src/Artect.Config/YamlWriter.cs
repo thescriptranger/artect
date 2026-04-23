@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 
 namespace Artect.Config;
@@ -30,6 +32,12 @@ public static class YamlWriter
         sb.AppendLine($"validateForeignKeyReferences: {Bool(cfg.ValidateForeignKeyReferences)}");
         sb.AppendLine("schemas:");
         foreach (var s in cfg.Schemas) sb.AppendLine($"  - {s}");
+        if (cfg.NamingCorrections.Count > 0)
+        {
+            sb.AppendLine("namingCorrections:");
+            foreach (var kv in cfg.NamingCorrections.OrderBy(k => k.Key, StringComparer.Ordinal))
+                sb.AppendLine($"  {kv.Key}: {kv.Value}");
+        }
         return sb.ToString();
     }
 

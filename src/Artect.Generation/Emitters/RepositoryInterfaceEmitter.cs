@@ -69,7 +69,7 @@ public sealed class RepositoryInterfaceEmitter : IEmitter
         // Views — list-only
         foreach (var view in ctx.Graph.Views)
         {
-            var typeName = CasingHelper.ToPascalCase(Pluralizer.Singularize(view.Name));
+            var typeName = CasingHelper.ToPascalCase(Pluralizer.Singularize(view.Name), ctx.NamingCorrections);
             if (split)
             {
                 list.Add(new EmittedFile(

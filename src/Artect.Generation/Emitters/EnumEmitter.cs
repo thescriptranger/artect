@@ -36,8 +36,8 @@ public sealed class EnumEmitter : IEmitter
                     string.Equals(c.Name, parsed.Value.Column, System.StringComparison.OrdinalIgnoreCase));
                 if (col is null) continue;
 
-                var enumName = CasingHelper.ToPascalCase(entity.EntityTypeName)
-                    + CasingHelper.ToPascalCase(parsed.Value.Column)
+                var enumName = CasingHelper.ToPascalCase(entity.EntityTypeName, ctx.NamingCorrections)
+                    + CasingHelper.ToPascalCase(parsed.Value.Column, ctx.NamingCorrections)
                     + "Enum";
 
                 // Deduplicate across all entities
@@ -49,7 +49,7 @@ public sealed class EnumEmitter : IEmitter
                     Namespace = ns,
                     EnumName = enumName,
                     Values = parsed.Value.Values
-                        .Select(v => CasingHelper.ToPascalCase(v))
+                        .Select(v => CasingHelper.ToPascalCase(v, ctx.NamingCorrections))
                         .ToList(),
                 };
                 var rendered = Renderer.Render(template, data);

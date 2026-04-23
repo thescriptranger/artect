@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Artect.Config;
 using Artect.Core.Schema;
 using Artect.Naming;
@@ -11,6 +12,7 @@ public sealed class EmitterContext
     public SchemaGraph Graph { get; }
     public NamedSchemaModel Model { get; }
     public TemplateLoader Templates { get; }
+    public IReadOnlyDictionary<string, string> NamingCorrections => Config.NamingCorrections;
 
     public EmitterContext(ArtectConfig cfg, SchemaGraph graph, NamedSchemaModel model, TemplateLoader templates)
     {

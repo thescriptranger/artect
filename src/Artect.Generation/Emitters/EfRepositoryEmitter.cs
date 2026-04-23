@@ -55,6 +55,7 @@ public sealed class EfRepositoryEmitter : IEmitter
 
     static string BuildReadRepository(EmitterContext ctx, NamedEntity entity, string project)
     {
+        var corrections = ctx.NamingCorrections;
         var name     = entity.EntityTypeName;
         var dbset    = entity.DbSetPropertyName;
         var dbCtx    = $"{project}DbContext";
@@ -62,7 +63,8 @@ public sealed class EfRepositoryEmitter : IEmitter
         var pkProp   = EntityNaming.PropertyName(
             entity.Table.Columns.First(c =>
                 string.Equals(c.Name, entity.Table.PrimaryKey!.ColumnNames[0],
-                    System.StringComparison.OrdinalIgnoreCase)));
+                    System.StringComparison.OrdinalIgnoreCase)),
+            corrections);
 
         var ns        = $"{CleanLayout.InfrastructureNamespace(project)}.Repositories";
         var dataAbsNs = $"{CleanLayout.InfrastructureNamespace(project)}.Data";
@@ -78,7 +80,7 @@ public sealed class EfRepositoryEmitter : IEmitter
             sb2.AppendLine("            {");
             foreach (var col in allCols)
             {
-                var prop = EntityNaming.PropertyName(col);
+                var prop = EntityNaming.PropertyName(col, corrections);
                 sb2.AppendLine($"                {prop} = {srcVar}.{prop},");
             }
             sb2.Append("            }");
@@ -145,6 +147,7 @@ public sealed class EfRepositoryEmitter : IEmitter
 
     static string BuildWriteRepository(EmitterContext ctx, NamedEntity entity, string project)
     {
+        var corrections = ctx.NamingCorrections;
         var name     = entity.EntityTypeName;
         var dbset    = entity.DbSetPropertyName;
         var dbCtx    = $"{project}DbContext";
@@ -152,7 +155,8 @@ public sealed class EfRepositoryEmitter : IEmitter
         var pkProp   = EntityNaming.PropertyName(
             entity.Table.Columns.First(c =>
                 string.Equals(c.Name, entity.Table.PrimaryKey!.ColumnNames[0],
-                    System.StringComparison.OrdinalIgnoreCase)));
+                    System.StringComparison.OrdinalIgnoreCase)),
+            corrections);
 
         var ns        = $"{CleanLayout.InfrastructureNamespace(project)}.Repositories";
         var dataAbsNs = $"{CleanLayout.InfrastructureNamespace(project)}.Data";
@@ -168,7 +172,7 @@ public sealed class EfRepositoryEmitter : IEmitter
             sb2.AppendLine("        {");
             foreach (var col in allCols)
             {
-                var prop = EntityNaming.PropertyName(col);
+                var prop = EntityNaming.PropertyName(col, corrections);
                 sb2.AppendLine($"            {prop} = {srcVar}.{prop},");
             }
             sb2.Append("        }");
@@ -232,6 +236,7 @@ public sealed class EfRepositoryEmitter : IEmitter
 
     static string BuildMonolithicRepository(EmitterContext ctx, NamedEntity entity, string project)
     {
+        var corrections = ctx.NamingCorrections;
         var name     = entity.EntityTypeName;
         var dbset    = entity.DbSetPropertyName;
         var dbCtx    = $"{project}DbContext";
@@ -239,7 +244,8 @@ public sealed class EfRepositoryEmitter : IEmitter
         var pkProp   = EntityNaming.PropertyName(
             entity.Table.Columns.First(c =>
                 string.Equals(c.Name, entity.Table.PrimaryKey!.ColumnNames[0],
-                    System.StringComparison.OrdinalIgnoreCase)));
+                    System.StringComparison.OrdinalIgnoreCase)),
+            corrections);
 
         var ns        = $"{CleanLayout.InfrastructureNamespace(project)}.Repositories";
         var dataAbsNs = $"{CleanLayout.InfrastructureNamespace(project)}.Data";
@@ -256,7 +262,7 @@ public sealed class EfRepositoryEmitter : IEmitter
             sb2.AppendLine("            {");
             foreach (var col in allCols)
             {
-                var prop = EntityNaming.PropertyName(col);
+                var prop = EntityNaming.PropertyName(col, corrections);
                 sb2.AppendLine($"                {prop} = {srcVar}.{prop},");
             }
             sb2.Append("            }");

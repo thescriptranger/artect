@@ -19,13 +19,15 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         var list = new List<EmittedFile>();
         var project = ctx.Config.ProjectName;
 
+        var corrections = ctx.NamingCorrections;
+
         // ── regular entities (tables with PK) ─────────────────────────────
         foreach (var entity in ctx.Model.Entities)
         {
             if (entity.IsJoinTable) continue;
 
             var plural = entity.DbSetPropertyName; // already pluralised PascalCase
-            var route = CasingHelper.ToKebabCase(plural);
+            var route = CasingHelper.ToKebabCase(plural, corrections);
             string content;
             if (entity.HasPrimaryKey)
             {
@@ -43,9 +45,9 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         // ── views (list-only) ──────────────────────────────────────────────
         foreach (var view in ctx.Graph.Views)
         {
-            var typeName = CasingHelper.ToPascalCase(Pluralizer.Singularize(view.Name));
-            var plural   = CasingHelper.ToPascalCase(Pluralizer.Pluralize(Pluralizer.Singularize(view.Name)));
-            var route    = CasingHelper.ToKebabCase(plural);
+            var typeName = CasingHelper.ToPascalCase(Pluralizer.Singularize(view.Name), corrections);
+            var plural   = CasingHelper.ToPascalCase(Pluralizer.Pluralize(Pluralizer.Singularize(view.Name)), corrections);
+            var route    = CasingHelper.ToKebabCase(plural, corrections);
             var content  = BuildListOnlyEndpoints(ctx, typeName, plural, route, project);
             var path     = CleanLayout.EndpointPath(project, plural);
             list.Add(new EmittedFile(path, content));
@@ -76,8 +78,9 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
 
         // PK route segment(s)
         var pk = entity.Table.PrimaryKey!;
-        var pkRouteParams = BuildPkRouteParams(entity);   // e.g. "int id" or "int id, Guid sub"
-        var pkRouteSegments = BuildPkRouteSegments(entity); // e.g. "/{id}" or "/{id}/{sub}"
+        var corrections = ctx.NamingCorrections;
+        var pkRouteParams = BuildPkRouteParams(entity, corrections);   // e.g. "int id" or "int id, Guid sub"
+        var pkRouteSegments = BuildPkRouteSegments(entity, corrections); // e.g. "/{id}" or "/{id}/{sub}"
 
         var hasWrite = (crud & (CrudOperation.Post | CrudOperation.Put | CrudOperation.Patch)) != 0;
         var hasQuery = (crud & (CrudOperation.GetList | CrudOperation.GetById)) != 0;
@@ -130,7 +133,7 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         if ((crud & CrudOperation.GetById) != 0)
         {
             sb.AppendLine($"        group.MapGet(\"{pkRouteSegments}\", async ({pkRouteParams}, IUseCase<Get{entityName}ByIdQuery, UseCaseResult<{entityName}Model>> useCase, System.Threading.CancellationToken ct) =>");
-            sb.AppendLine($"            (await useCase.ExecuteAsync({entityName}ApiMappers.ToGetByIdQuery({BuildPkArgNames(entity)}), ct)).ToIResult(m => m.ToResponse()));");
+            sb.AppendLine($"            (await useCase.ExecuteAsync({entityName}ApiMappers.ToGetByIdQuery({BuildPkArgNames(entity, corrections)}), ct)).ToIResult(m => m.ToResponse()));");
             sb.AppendLine();
         }
 
@@ -144,21 +147,21 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         if ((crud & CrudOperation.Put) != 0)
         {
             sb.AppendLine($"        group.MapPut(\"{pkRouteSegments}\", async ({pkRouteParams}, Update{entityName}Request request, IUseCase<Update{entityName}Command, UseCaseResult<Unit>> useCase, System.Threading.CancellationToken ct) =>");
-            sb.AppendLine($"            (await useCase.ExecuteAsync(request.ToUpdateCommand({BuildPkArgNames(entity)}), ct)).ToIResult());");
+            sb.AppendLine($"            (await useCase.ExecuteAsync(request.ToUpdateCommand({BuildPkArgNames(entity, corrections)}), ct)).ToIResult());");
             sb.AppendLine();
         }
 
         if ((crud & CrudOperation.Patch) != 0)
         {
             sb.AppendLine($"        group.MapPatch(\"{pkRouteSegments}\", async ({pkRouteParams}, Update{entityName}Request request, IUseCase<Patch{entityName}Command, UseCaseResult<Unit>> useCase, System.Threading.CancellationToken ct) =>");
-            sb.AppendLine($"            (await useCase.ExecuteAsync(request.ToPatchCommand({BuildPkArgNames(entity)}), ct)).ToIResult());");
+            sb.AppendLine($"            (await useCase.ExecuteAsync(request.ToPatchCommand({BuildPkArgNames(entity, corrections)}), ct)).ToIResult());");
             sb.AppendLine();
         }
 
         if ((crud & CrudOperation.Delete) != 0)
         {
             sb.AppendLine($"        group.MapDelete(\"{pkRouteSegments}\", async ({pkRouteParams}, IUseCase<Delete{entityName}Command, UseCaseResult<Unit>> useCase, System.Threading.CancellationToken ct) =>");
-            sb.AppendLine($"            (await useCase.ExecuteAsync({entityName}ApiMappers.ToDeleteCommand({BuildPkArgNames(entity)}), ct)).ToIResult());");
+            sb.AppendLine($"            (await useCase.ExecuteAsync({entityName}ApiMappers.ToDeleteCommand({BuildPkArgNames(entity, corrections)}), ct)).ToIResult());");
             sb.AppendLine();
         }
 
@@ -220,29 +223,29 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
     // ──────────────────────────────────────────────────────────────────────
 
     /// <summary>Route segments for PK columns, e.g. "/{id}" or "/{userId}/{roleId}".</summary>
-    static string BuildPkRouteSegments(NamedEntity entity)
+    static string BuildPkRouteSegments(NamedEntity entity, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var pk = entity.Table.PrimaryKey!;
-        var segments = pk.ColumnNames.Select(n => $"{{{CasingHelper.ToCamelCase(n)}}}");
+        var segments = pk.ColumnNames.Select(n => $"{{{CasingHelper.ToCamelCase(n, corrections)}}}");
         return "/" + string.Join("/", segments);
     }
 
     /// <summary>Lambda parameter list for PK columns with their C# types, e.g. "int id" or "int userId, int roleId".</summary>
-    static string BuildPkRouteParams(NamedEntity entity)
+    static string BuildPkRouteParams(NamedEntity entity, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var pk = entity.Table.PrimaryKey!;
         return string.Join(", ", pk.ColumnNames.Select(n =>
         {
             var col = entity.Table.Columns.First(c =>
                 string.Equals(c.Name, n, System.StringComparison.OrdinalIgnoreCase));
-            return $"{SqlTypeMap.ToCs(col.ClrType)} {CasingHelper.ToCamelCase(n)}";
+            return $"{SqlTypeMap.ToCs(col.ClrType)} {CasingHelper.ToCamelCase(n, corrections)}";
         }));
     }
 
     /// <summary>Comma-separated camelCase PK argument names for mapper calls, e.g. "id" or "userId, roleId".</summary>
-    static string BuildPkArgNames(NamedEntity entity)
+    static string BuildPkArgNames(NamedEntity entity, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var pk = entity.Table.PrimaryKey!;
-        return string.Join(", ", pk.ColumnNames.Select(n => CasingHelper.ToCamelCase(n)));
+        return string.Join(", ", pk.ColumnNames.Select(n => CasingHelper.ToCamelCase(n, corrections)));
     }
 }

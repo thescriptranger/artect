@@ -30,7 +30,7 @@ public sealed class DbFunctionsEmitter : IEmitter
 
         foreach (var schemaGroup in bySchema)
         {
-            var schemaPascal = CasingHelper.ToPascalCase(schemaGroup.Key);
+            var schemaPascal = CasingHelper.ToPascalCase(schemaGroup.Key, ctx.NamingCorrections);
             var ifaceName    = $"I{schemaPascal}DbFunctions";
             var implName     = $"{schemaPascal}DbFunctions";
             var functions    = schemaGroup.OrderBy(f => f.Name, System.StringComparer.Ordinal).ToList();
@@ -46,8 +46,8 @@ public sealed class DbFunctionsEmitter : IEmitter
             foreach (var fn in functions)
             {
                 var returnCs   = FunctionReturnCs(fn);
-                var paramList  = BuildFunctionParamList(fn.Parameters);
-                var methodName = CasingHelper.ToPascalCase(fn.Name);
+                var paramList  = BuildFunctionParamList(fn.Parameters, ctx.NamingCorrections);
+                var methodName = CasingHelper.ToPascalCase(fn.Name, ctx.NamingCorrections);
                 ifaceSb.AppendLine($"    /// <summary>Calls [{schemaGroup.Key}].[{fn.Name}].</summary>");
                 ifaceSb.AppendLine($"    {returnCs} {methodName}({paramList});");
             }
@@ -68,8 +68,8 @@ public sealed class DbFunctionsEmitter : IEmitter
             foreach (var fn in functions)
             {
                 var returnCs   = FunctionReturnCs(fn);
-                var paramList  = BuildFunctionParamList(fn.Parameters);
-                var methodName = CasingHelper.ToPascalCase(fn.Name);
+                var paramList  = BuildFunctionParamList(fn.Parameters, ctx.NamingCorrections);
+                var methodName = CasingHelper.ToPascalCase(fn.Name, ctx.NamingCorrections);
                 implSb.AppendLine($"    /// <inheritdoc />");
                 implSb.AppendLine($"    public {returnCs} {methodName}({paramList})");
                 implSb.AppendLine("        => throw new System.NotImplementedException();");
@@ -103,7 +103,7 @@ public sealed class DbFunctionsEmitter : IEmitter
             ? $"{CasingHelper.ToPascalCase(fn.Name)}Row"
             : "object";
 
-    static string BuildFunctionParamList(IReadOnlyList<FunctionParameter> parameters)
+    static string BuildFunctionParamList(IReadOnlyList<FunctionParameter> parameters, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         if (parameters.Count == 0) return string.Empty;
 
@@ -112,7 +112,7 @@ public sealed class DbFunctionsEmitter : IEmitter
             .Select(p =>
             {
                 var cs   = SqlTypeMap.ToCs(p.ClrType);
-                var name = CasingHelper.ToCamelCase(p.Name.TrimStart('@'));
+                var name = CasingHelper.ToCamelCase(p.Name.TrimStart('@'), corrections);
                 return p.IsNullable ? $"{cs}? {name}" : $"{cs} {name}";
             }));
     }

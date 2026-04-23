@@ -48,20 +48,21 @@ public sealed class EntityApiMappersEmitter : IEmitter
         sb.AppendLine($"internal static class {entityName}ApiMappers");
         sb.AppendLine("{");
 
+        var corrections = ctx.NamingCorrections;
         if (ctx.Config.Crud.HasFlag(CrudOperation.Post))
-            EmitCreateMapper(sb, entity);
+            EmitCreateMapper(sb, entity, corrections);
         if (ctx.Config.Crud.HasFlag(CrudOperation.Put))
-            EmitUpdateMapper(sb, entity, "Update");
+            EmitUpdateMapper(sb, entity, "Update", corrections);
         if (ctx.Config.Crud.HasFlag(CrudOperation.Patch))
-            EmitUpdateMapper(sb, entity, "Patch");
+            EmitUpdateMapper(sb, entity, "Patch", corrections);
         if (ctx.Config.Crud.HasFlag(CrudOperation.Delete))
-            EmitDeleteMapper(sb, entity);
+            EmitDeleteMapper(sb, entity, corrections);
         if (ctx.Config.Crud.HasFlag(CrudOperation.GetById))
-            EmitGetByIdMapper(sb, entity);
+            EmitGetByIdMapper(sb, entity, corrections);
         if (ctx.Config.Crud.HasFlag(CrudOperation.GetList))
-            EmitListMapper(sb, entity);
+            EmitListMapper(sb, entity, corrections);
 
-        EmitResponseMapper(sb, entity);
+        EmitResponseMapper(sb, entity, corrections);
 
         sb.AppendLine("}");
         return new EmittedFile(
@@ -69,13 +70,13 @@ public sealed class EntityApiMappersEmitter : IEmitter
             sb.ToString());
     }
 
-    static void EmitCreateMapper(StringBuilder sb, NamedEntity entity)
+    static void EmitCreateMapper(StringBuilder sb, NamedEntity entity, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var e = entity.EntityTypeName;
         var nonPkCols = entity.Table.Columns.Where(c => !c.IsServerGenerated).ToList();
         var assigns = string.Join(", ", nonPkCols.Select(c =>
         {
-            var name = EntityNaming.PropertyName(c);
+            var name = EntityNaming.PropertyName(c, corrections);
             return $"{name} = r.{name}";
         }));
         sb.AppendLine($"    public static Create{e}Command ToCommand(this Create{e}Request r) =>");
@@ -83,7 +84,7 @@ public sealed class EntityApiMappersEmitter : IEmitter
         sb.AppendLine();
     }
 
-    static void EmitUpdateMapper(StringBuilder sb, NamedEntity entity, string op)
+    static void EmitUpdateMapper(StringBuilder sb, NamedEntity entity, string op, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var e = entity.EntityTypeName;
         var pk = entity.Table.PrimaryKey!;
@@ -91,18 +92,18 @@ public sealed class EntityApiMappersEmitter : IEmitter
         {
             var col = entity.Table.Columns.First(c => c.Name == n);
             var cs = SqlTypeMap.ToCs(col.ClrType);
-            return $"{cs} {CasingHelper.ToCamelCase(n)}";
+            return $"{cs} {CasingHelper.ToCamelCase(n, corrections)}";
         }));
         var pkInits = string.Join(", ", pk.ColumnNames.Select(n =>
         {
             var col = entity.Table.Columns.First(c => c.Name == n);
-            return $"{EntityNaming.PropertyName(col)} = {CasingHelper.ToCamelCase(n)}";
+            return $"{EntityNaming.PropertyName(col, corrections)} = {CasingHelper.ToCamelCase(n, corrections)}";
         }));
         var nonPkAssigns = string.Join(", ", entity.Table.Columns
             .Where(c => !pk.ColumnNames.Contains(c.Name))
             .Select(c =>
             {
-                var name = EntityNaming.PropertyName(c);
+                var name = EntityNaming.PropertyName(c, corrections);
                 return $"{name} = r.{name}";
             }));
         var allInits = string.Join(", ", new[] { pkInits, nonPkAssigns }.Where(s => !string.IsNullOrEmpty(s)));
@@ -111,7 +112,7 @@ public sealed class EntityApiMappersEmitter : IEmitter
         sb.AppendLine();
     }
 
-    static void EmitDeleteMapper(StringBuilder sb, NamedEntity entity)
+    static void EmitDeleteMapper(StringBuilder sb, NamedEntity entity, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var e = entity.EntityTypeName;
         var pk = entity.Table.PrimaryKey!;
@@ -119,19 +120,19 @@ public sealed class EntityApiMappersEmitter : IEmitter
         {
             var col = entity.Table.Columns.First(c => c.Name == n);
             var cs = SqlTypeMap.ToCs(col.ClrType);
-            return $"{cs} {CasingHelper.ToCamelCase(n)}";
+            return $"{cs} {CasingHelper.ToCamelCase(n, corrections)}";
         }));
         var pkInits = string.Join(", ", pk.ColumnNames.Select(n =>
         {
             var col = entity.Table.Columns.First(c => c.Name == n);
-            return $"{EntityNaming.PropertyName(col)} = {CasingHelper.ToCamelCase(n)}";
+            return $"{EntityNaming.PropertyName(col, corrections)} = {CasingHelper.ToCamelCase(n, corrections)}";
         }));
         sb.AppendLine($"    public static Delete{e}Command ToDeleteCommand({pkArgs}) =>");
         sb.AppendLine($"        new() {{ {pkInits} }};");
         sb.AppendLine();
     }
 
-    static void EmitGetByIdMapper(StringBuilder sb, NamedEntity entity)
+    static void EmitGetByIdMapper(StringBuilder sb, NamedEntity entity, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var e = entity.EntityTypeName;
         var pk = entity.Table.PrimaryKey!;
@@ -139,28 +140,28 @@ public sealed class EntityApiMappersEmitter : IEmitter
         {
             var col = entity.Table.Columns.First(c => c.Name == n);
             var cs = SqlTypeMap.ToCs(col.ClrType);
-            return $"{cs} {CasingHelper.ToCamelCase(n)}";
+            return $"{cs} {CasingHelper.ToCamelCase(n, corrections)}";
         }));
-        var pkArgsForRecord = string.Join(", ", pk.ColumnNames.Select(n => CasingHelper.ToCamelCase(n)));
+        var pkArgsForRecord = string.Join(", ", pk.ColumnNames.Select(n => CasingHelper.ToCamelCase(n, corrections)));
         sb.AppendLine($"    public static Get{e}ByIdQuery ToGetByIdQuery({pkArgs}) =>");
         sb.AppendLine($"        new({pkArgsForRecord});");
         sb.AppendLine();
     }
 
-    static void EmitListMapper(StringBuilder sb, NamedEntity entity)
+    static void EmitListMapper(StringBuilder sb, NamedEntity entity, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
-        var plural = CasingHelper.ToPascalCase(Pluralizer.Pluralize(entity.EntityTypeName));
+        var plural = CasingHelper.ToPascalCase(Pluralizer.Pluralize(entity.EntityTypeName), corrections);
         sb.AppendLine($"    public static List{plural}Query ToListQuery(int page, int pageSize) =>");
         sb.AppendLine($"        new(page, pageSize);");
         sb.AppendLine();
     }
 
-    static void EmitResponseMapper(StringBuilder sb, NamedEntity entity)
+    static void EmitResponseMapper(StringBuilder sb, NamedEntity entity, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var e = entity.EntityTypeName;
         var assigns = string.Join(", ", entity.Table.Columns.Select(c =>
         {
-            var name = EntityNaming.PropertyName(c);
+            var name = EntityNaming.PropertyName(c, corrections);
             return $"{name} = m.{name}";
         }));
         sb.AppendLine($"    public static {e}Response ToResponse(this {e}Model m) =>");

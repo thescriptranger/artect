@@ -39,13 +39,15 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         var crud    = ctx.Config.Crud;
         var split   = ctx.Config.SplitRepositoriesByIntent;
 
+        var corrections = ctx.NamingCorrections;
+
         // Regular entities
         foreach (var entity in ctx.Model.Entities)
         {
             if (entity.IsJoinTable) continue;
 
             if (entity.HasPrimaryKey)
-                EmitFullInteractors(list, ctx, entity, project, crud, split);
+                EmitFullInteractors(list, ctx, entity, project, crud, split, corrections);
             else
                 EmitListOnlyInteractors(list, ctx, entity.EntityTypeName, entity.DbSetPropertyName, project, split);
         }
@@ -53,8 +55,8 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         // Views — list-only
         foreach (var view in ctx.Graph.Views)
         {
-            var typeName = CasingHelper.ToPascalCase(Pluralizer.Singularize(view.Name));
-            var plural   = CasingHelper.ToPascalCase(Pluralizer.Pluralize(Pluralizer.Singularize(view.Name)));
+            var typeName = CasingHelper.ToPascalCase(Pluralizer.Singularize(view.Name), corrections);
+            var plural   = CasingHelper.ToPascalCase(Pluralizer.Pluralize(Pluralizer.Singularize(view.Name)), corrections);
             EmitListOnlyInteractors(list, ctx, typeName, plural, project, split);
         }
 
@@ -71,7 +73,8 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         NamedEntity entity,
         string project,
         CrudOperation crud,
-        bool split)
+        bool split,
+        System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var entityName = entity.EntityTypeName;
         var plural     = entity.DbSetPropertyName;
@@ -81,19 +84,19 @@ public sealed class UseCaseInteractorEmitter : IEmitter
             list.Add(EmitListInteractor(project, entityName, plural, split));
 
         if ((crud & CrudOperation.GetById) != 0)
-            list.Add(EmitGetByIdInteractor(project, entityName, entity, split));
+            list.Add(EmitGetByIdInteractor(project, entityName, entity, split, corrections));
 
         if ((crud & CrudOperation.Post) != 0)
-            list.Add(EmitCreateInteractor(project, entity, split));
+            list.Add(EmitCreateInteractor(project, entity, split, corrections));
 
         if ((crud & CrudOperation.Put) != 0)
-            list.Add(EmitUpdateInteractor(project, entity, pkType, "Update", split));
+            list.Add(EmitUpdateInteractor(project, entity, pkType, "Update", split, corrections));
 
         if ((crud & CrudOperation.Patch) != 0)
-            list.Add(EmitPatchInteractor(project, entity, pkType, split));
+            list.Add(EmitPatchInteractor(project, entity, pkType, split, corrections));
 
         if ((crud & CrudOperation.Delete) != 0)
-            list.Add(EmitDeleteInteractor(project, entity, pkType, split));
+            list.Add(EmitDeleteInteractor(project, entity, pkType, split, corrections));
     }
 
     static void EmitListOnlyInteractors(
@@ -159,7 +162,7 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         return new EmittedFile(CleanLayout.UseCaseImplPath(project, opName), impl.ToString());
     }
 
-    static EmittedFile EmitGetByIdInteractor(string project, string entityName, NamedEntity entity, bool split)
+    static EmittedFile EmitGetByIdInteractor(string project, string entityName, NamedEntity entity, bool split, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var opName    = $"Get{entityName}ById";
         var queryName = $"Get{entityName}ByIdQuery";
@@ -173,10 +176,10 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         var pk = entity.Table.PrimaryKey!;
         var pkNames = pk.ColumnNames.ToHashSet(System.StringComparer.OrdinalIgnoreCase);
         var pkCols = entity.Table.Columns.Where(c => pkNames.Contains(c.Name)).ToList();
-        var pkArgExpr = string.Join(", ", pkCols.Select(c => $"query.{EntityNaming.PropertyName(c)}"));
+        var pkArgExpr = string.Join(", ", pkCols.Select(c => $"query.{EntityNaming.PropertyName(c, corrections)}"));
         var idDisplayExpr = pkCols.Count == 1
-            ? $"query.{EntityNaming.PropertyName(pkCols[0])}.ToString()!"
-            : "$\"(" + string.Join(", ", pkCols.Select(c => $"{{query.{EntityNaming.PropertyName(c)}}}")) + ")\"";
+            ? $"query.{EntityNaming.PropertyName(pkCols[0], corrections)}.ToString()!"
+            : "$\"(" + string.Join(", ", pkCols.Select(c => $"{{query.{EntityNaming.PropertyName(c, corrections)}}}")) + ")\"";
 
         var repoFieldType = split ? $"I{entityName}ReadRepository" : $"I{entityName}Repository";
         var repoParamName = split ? "read" : "repo";
@@ -213,7 +216,7 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         return new EmittedFile(CleanLayout.UseCaseImplPath(project, opName), impl.ToString());
     }
 
-    static EmittedFile EmitCreateInteractor(string project, NamedEntity entity, bool split)
+    static EmittedFile EmitCreateInteractor(string project, NamedEntity entity, bool split, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var entityName = entity.EntityTypeName;
         var opName     = $"Create{entityName}";
@@ -229,7 +232,7 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         var errorsNs   = CleanLayout.ApplicationErrorsNamespace(project);
 
         var factoryArgs = entity.Table.Columns.Where(c => !c.IsServerGenerated).ToList();
-        var factoryArgExpr = string.Join(", ", factoryArgs.Select(c => $"command.{EntityNaming.PropertyName(c)}"));
+        var factoryArgExpr = string.Join(", ", factoryArgs.Select(c => $"command.{EntityNaming.PropertyName(c, corrections)}"));
 
         var impl = new StringBuilder();
         impl.AppendLine($"using System.Linq;");
@@ -292,7 +295,7 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         return new EmittedFile(CleanLayout.UseCaseImplPath(project, opName), impl.ToString());
     }
 
-    static EmittedFile EmitUpdateInteractor(string project, NamedEntity entity, string pkType, string verb, bool split)
+    static EmittedFile EmitUpdateInteractor(string project, NamedEntity entity, string pkType, string verb, bool split, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var entityName = entity.EntityTypeName;
         var opName     = $"{verb}{entityName}";
@@ -307,7 +310,7 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         var pk = entity.Table.PrimaryKey!;
         var pkNames = pk.ColumnNames.ToHashSet(System.StringComparer.OrdinalIgnoreCase);
         var pkCol = entity.Table.Columns.First(c => pkNames.Contains(c.Name));
-        var pkProp = EntityNaming.PropertyName(pkCol);
+        var pkProp = EntityNaming.PropertyName(pkCol, corrections);
         var allCols = entity.Table.Columns.ToList();
 
         var impl = new StringBuilder();
@@ -359,7 +362,7 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         impl.AppendLine("        {");
         foreach (var col in allCols)
         {
-            var prop = EntityNaming.PropertyName(col);
+            var prop = EntityNaming.PropertyName(col, corrections);
             impl.AppendLine($"            {prop} = command.{prop},");
         }
         impl.AppendLine("        };");
@@ -378,12 +381,12 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         return new EmittedFile(CleanLayout.UseCaseImplPath(project, opName), impl.ToString());
     }
 
-    static EmittedFile EmitPatchInteractor(string project, NamedEntity entity, string pkType, bool split)
+    static EmittedFile EmitPatchInteractor(string project, NamedEntity entity, string pkType, bool split, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
-        return EmitUpdateInteractor(project, entity, pkType, "Patch", split);
+        return EmitUpdateInteractor(project, entity, pkType, "Patch", split, corrections);
     }
 
-    static EmittedFile EmitDeleteInteractor(string project, NamedEntity entity, string pkType, bool split)
+    static EmittedFile EmitDeleteInteractor(string project, NamedEntity entity, string pkType, bool split, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var entityName  = entity.EntityTypeName;
         var opName      = $"Delete{entityName}";
@@ -398,11 +401,11 @@ public sealed class UseCaseInteractorEmitter : IEmitter
         var pkNames = pk.ColumnNames.ToHashSet(System.StringComparer.OrdinalIgnoreCase);
         var pkCols = entity.Table.Columns.Where(c => pkNames.Contains(c.Name)).ToList();
         var pkArgExpr = pkCols.Count == 1
-            ? $"command.{EntityNaming.PropertyName(pkCols[0])}"
-            : "(" + string.Join(", ", pkCols.Select(c => $"command.{EntityNaming.PropertyName(c)}")) + ")";
+            ? $"command.{EntityNaming.PropertyName(pkCols[0], corrections)}"
+            : "(" + string.Join(", ", pkCols.Select(c => $"command.{EntityNaming.PropertyName(c, corrections)}")) + ")";
         var idDisplayExpr = pkCols.Count == 1
-            ? $"command.{EntityNaming.PropertyName(pkCols[0])}.ToString()!"
-            : "$\"(" + string.Join(", ", pkCols.Select(c => $"{{command.{EntityNaming.PropertyName(c)}}}")) + ")\"";
+            ? $"command.{EntityNaming.PropertyName(pkCols[0], corrections)}.ToString()!"
+            : "$\"(" + string.Join(", ", pkCols.Select(c => $"{{command.{EntityNaming.PropertyName(c, corrections)}}}")) + ")\"";
 
         var impl = new StringBuilder();
         impl.AppendLine($"using System.Threading;");

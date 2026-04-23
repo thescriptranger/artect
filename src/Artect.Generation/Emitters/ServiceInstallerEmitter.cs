@@ -153,8 +153,8 @@ public sealed class ServiceInstallerEmitter : IEmitter
 
         foreach (var view in ctx.Graph.Views)
         {
-            var typeName = CasingHelper.ToPascalCase(Pluralizer.Singularize(view.Name));
-            var plural   = CasingHelper.ToPascalCase(Pluralizer.Pluralize(Pluralizer.Singularize(view.Name)));
+            var typeName = CasingHelper.ToPascalCase(Pluralizer.Singularize(view.Name), ctx.NamingCorrections);
+            var plural   = CasingHelper.ToPascalCase(Pluralizer.Pluralize(Pluralizer.Singularize(view.Name)), ctx.NamingCorrections);
             AppendQueryRegistration(ucLines, $"List{plural}", $"List{plural}Query", $"PagedResult<{typeName}Model>");
         }
 
@@ -314,7 +314,7 @@ public sealed class ServiceInstallerEmitter : IEmitter
             if (cfg.PartitionStoredProceduresBySchema)
             {
                 var sprocSchemas = ctx.Graph.StoredProcedures
-                    .Select(sp => CasingHelper.ToPascalCase(sp.Schema))
+                    .Select(sp => CasingHelper.ToPascalCase(sp.Schema, ctx.NamingCorrections))
                     .Distinct(System.StringComparer.Ordinal)
                     .OrderBy(s => s, System.StringComparer.Ordinal);
                 foreach (var schema in sprocSchemas)
@@ -332,7 +332,7 @@ public sealed class ServiceInstallerEmitter : IEmitter
             sb.AppendLine();
             sb.AppendLine("        // DB functions");
             var fnSchemas = ctx.Graph.Functions
-                .Select(f => CasingHelper.ToPascalCase(f.Schema))
+                .Select(f => CasingHelper.ToPascalCase(f.Schema, ctx.NamingCorrections))
                 .Distinct(System.StringComparer.Ordinal)
                 .OrderBy(s => s, System.StringComparer.Ordinal);
             foreach (var schema in fnSchemas)

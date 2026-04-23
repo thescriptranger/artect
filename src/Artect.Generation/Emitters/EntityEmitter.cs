@@ -27,6 +27,7 @@ public sealed class EntityEmitter : IEmitter
 
     static object BuildData(EmitterContext ctx, NamedEntity entity)
     {
+        var corrections = ctx.NamingCorrections;
         var factoryArgs = entity.Table.Columns
             .Where(c => !c.IsServerGenerated)
             .ToList();
@@ -34,7 +35,7 @@ public sealed class EntityEmitter : IEmitter
         var invariantLines = new List<string>();
         foreach (var col in factoryArgs)
         {
-            var paramName = Artect.Naming.CasingHelper.ToCamelCase(col.Name);
+            var paramName = Artect.Naming.CasingHelper.ToCamelCase(col.Name, corrections);
             if (!col.IsNullable && col.ClrType == ClrType.String)
             {
                 invariantLines.Add($"if (string.IsNullOrWhiteSpace({paramName})) errors.Add(new {CleanLayout.DomainCommonNamespace(ctx.Config.ProjectName)}.DomainError(\"{paramName}\", \"required\", \"{col.Name} is required.\"));");
@@ -48,8 +49,8 @@ public sealed class EntityEmitter : IEmitter
         var createArgs = factoryArgs.Select((c, i) => new
         {
             ClrTypeWithNullability = ClrTypeString(c),
-            ParamName = Artect.Naming.CasingHelper.ToCamelCase(c.Name),
-            PropertyName = Artect.Naming.EntityNaming.PropertyName(c),
+            ParamName = Artect.Naming.CasingHelper.ToCamelCase(c.Name, corrections),
+            PropertyName = Artect.Naming.EntityNaming.PropertyName(c, corrections),
             Comma = i < factoryArgs.Count - 1 ? "," : "",
         }).ToList();
 
@@ -63,7 +64,7 @@ public sealed class EntityEmitter : IEmitter
             Columns = entity.Table.Columns.Select(c => new
             {
                 ClrTypeWithNullability = ClrTypeString(c),
-                PropertyName = Artect.Naming.EntityNaming.PropertyName(c),
+                PropertyName = Artect.Naming.EntityNaming.PropertyName(c, corrections),
                 Initializer = c.ClrType == ClrType.String && !c.IsNullable ? " = default!;" : string.Empty,
             }).ToList(),
             HasReferenceNavigations = entity.ReferenceNavigations.Count > 0,

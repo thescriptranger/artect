@@ -22,7 +22,7 @@ public sealed class DtoEmitter : IEmitter
                 Columns = entity.Table.Columns.Select(c => new
                 {
                     ClrTypeWithNullability = ClrTypeString(c),
-                    PropertyName = Artect.Naming.EntityNaming.PropertyName(c),
+                    PropertyName = Artect.Naming.EntityNaming.PropertyName(c, ctx.NamingCorrections),
                     Initializer = c.ClrType == ClrType.String && !c.IsNullable ? " = string.Empty;" : string.Empty,
                 }).ToList(),
             };

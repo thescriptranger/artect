@@ -19,7 +19,8 @@ public sealed record ArtectConfig(
     bool PartitionStoredProceduresBySchema,
     bool IncludeChildCollectionsInResponses,
     bool ValidateForeignKeyReferences,
-    IReadOnlyList<string> Schemas)
+    IReadOnlyList<string> Schemas,
+    IReadOnlyDictionary<string, string> NamingCorrections)
 {
     public static ArtectConfig Defaults() => new(
         ProjectName: "MyApi",
@@ -38,5 +39,6 @@ public sealed record ArtectConfig(
         PartitionStoredProceduresBySchema: false,
         IncludeChildCollectionsInResponses: false,
         ValidateForeignKeyReferences: false,
-        Schemas: new[] { "dbo" });
+        Schemas: new[] { "dbo" },
+        NamingCorrections: new Dictionary<string, string>());
 }

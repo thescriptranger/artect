@@ -40,11 +40,11 @@ public sealed class ApiTestsEmitter : IEmitter
             if (!entity.HasPrimaryKey) continue;
 
             var plural = entity.DbSetPropertyName;
-            var route = CasingHelper.ToKebabCase(plural);
+            var route = CasingHelper.ToKebabCase(plural, ctx.NamingCorrections);
 
             list.Add(new EmittedFile(
                 $"{testsDir}/Endpoints/{plural}EndpointsTests.cs",
-                BuildEndpointTest(entity, plural, route, testProject, project, ctx.Config)));
+                BuildEndpointTest(entity, plural, route, testProject, project, ctx.Config, ctx.NamingCorrections)));
         }
 
         return list;
@@ -136,7 +136,8 @@ public sealed class ApiTestsEmitter : IEmitter
 
     static string BuildEndpointTest(
         NamedEntity entity, string plural, string route,
-        string testsNs, string project, ArtectConfig cfg)
+        string testsNs, string project, ArtectConfig cfg,
+        System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var entityName = entity.EntityTypeName;
         var requestsNs = CleanLayout.SharedRequestsNamespace(project);
@@ -150,7 +151,7 @@ public sealed class ApiTestsEmitter : IEmitter
             .Where(c => !c.IsServerGenerated)
             .ToList();
 
-        var overrides = BuildMinimallyValidOverrides(entity, pkCols);
+        var overrides = BuildMinimallyValidOverrides(entity, pkCols, corrections);
         var initializerBody = needsPayload ? BuildInitializer(overrides) : string.Empty;
 
         var usings = new StringBuilder();
@@ -254,7 +255,8 @@ public sealed class ApiTestsEmitter : IEmitter
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     static List<(string Property, string Value)> BuildMinimallyValidOverrides(
-        NamedEntity entity, System.Collections.Generic.HashSet<string> pkCols)
+        NamedEntity entity, System.Collections.Generic.HashSet<string> pkCols,
+        System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var overrides = new List<(string Property, string Value)>();
         var overrideIndex = new System.Collections.Generic.Dictionary<string, int>(System.StringComparer.Ordinal);
@@ -274,7 +276,7 @@ public sealed class ApiTestsEmitter : IEmitter
         {
             if (pkCols.Contains(c.Name) && c.IsServerGenerated) continue;
             if (!c.IsNullable && c.ClrType == ClrType.String)
-                SetOverride(EntityNaming.PropertyName(c), "\"x\"");
+                SetOverride(EntityNaming.PropertyName(c, corrections), "\"x\"");
         }
 
         return overrides;

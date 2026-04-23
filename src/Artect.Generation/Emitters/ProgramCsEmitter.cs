@@ -126,7 +126,7 @@ public sealed class ProgramCsEmitter : IEmitter
             .OrderBy(p => p, System.StringComparer.Ordinal);
 
         var viewPlurals = ctx.Graph.Views
-            .Select(v => CasingHelper.ToPascalCase(Pluralizer.Pluralize(Pluralizer.Singularize(v.Name))))
+            .Select(v => CasingHelper.ToPascalCase(Pluralizer.Pluralize(Pluralizer.Singularize(v.Name)), ctx.NamingCorrections))
             .OrderBy(p => p, System.StringComparer.Ordinal);
 
         foreach (var plural in allEntityPlurals.Concat(viewPlurals).OrderBy(p => p, System.StringComparer.Ordinal))

@@ -16,6 +16,13 @@ public static class CasingHelper
         return sb.ToString();
     }
 
+    public static string ToPascalCase(string input, IReadOnlyDictionary<string, string>? corrections)
+    {
+        if (corrections is not null && corrections.TryGetValue(input, out var corrected))
+            input = corrected;
+        return ToPascalCase(input);
+    }
+
     public static string ToCamelCase(string input)
     {
         var pascal = ToPascalCase(input);
@@ -23,8 +30,28 @@ public static class CasingHelper
         return char.ToLowerInvariant(pascal[0]) + pascal[1..];
     }
 
+    public static string ToCamelCase(string input, IReadOnlyDictionary<string, string>? corrections)
+    {
+        if (corrections is not null && corrections.TryGetValue(input, out var corrected))
+            input = corrected;
+        return ToCamelCase(input);
+    }
+
     public static string ToKebabCase(string input) => JoinWords(SplitWords(input), '-');
+    public static string ToKebabCase(string input, IReadOnlyDictionary<string, string>? corrections)
+    {
+        if (corrections is not null && corrections.TryGetValue(input, out var corrected))
+            input = corrected;
+        return ToKebabCase(input);
+    }
+
     public static string ToSnakeCase(string input) => JoinWords(SplitWords(input), '_');
+    public static string ToSnakeCase(string input, IReadOnlyDictionary<string, string>? corrections)
+    {
+        if (corrections is not null && corrections.TryGetValue(input, out var corrected))
+            input = corrected;
+        return ToSnakeCase(input);
+    }
 
     static IReadOnlyList<string> SplitWords(string input)
     {

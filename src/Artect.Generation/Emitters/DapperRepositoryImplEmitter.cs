@@ -56,7 +56,7 @@ public sealed class DapperRepositoryImplEmitter : IEmitter
 
     static (string pkColName, string pkType, string pkProp, string fullTable,
             string selectCols, List<Column> insertCols, string insertColList,
-            string insertParamList, string updateSet) BuildSqlParts(NamedEntity entity)
+            string insertParamList, string updateSet) BuildSqlParts(NamedEntity entity, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var table      = entity.Table;
         var pk         = table.PrimaryKey!;
@@ -64,23 +64,23 @@ public sealed class DapperRepositoryImplEmitter : IEmitter
         var pkCol      = table.Columns.First(c =>
             string.Equals(c.Name, pkColName, System.StringComparison.OrdinalIgnoreCase));
         var pkType     = SqlTypeMap.ToCs(pkCol.ClrType);
-        var pkProp     = EntityNaming.PropertyName(pkCol);
+        var pkProp     = EntityNaming.PropertyName(pkCol, corrections);
         var fullTable  = $"[{table.Schema}].[{table.Name}]";
 
         var selectCols = string.Join(", ",
-            table.Columns.Select(c => $"[{c.Name}] AS [{EntityNaming.PropertyName(c)}]"));
+            table.Columns.Select(c => $"[{c.Name}] AS [{EntityNaming.PropertyName(c, corrections)}]"));
         var insertCols = table.Columns.Where(c => !c.IsServerGenerated).ToList();
         var insertColList   = string.Join(", ", insertCols.Select(c => $"[{c.Name}]"));
-        var insertParamList = string.Join(", ", insertCols.Select(c => $"@{EntityNaming.PropertyName(c)}"));
+        var insertParamList = string.Join(", ", insertCols.Select(c => $"@{EntityNaming.PropertyName(c, corrections)}"));
         var updateSetParts  = insertCols
             .Where(c => !string.Equals(c.Name, pkColName, System.StringComparison.OrdinalIgnoreCase))
-            .Select(c => $"[{c.Name}] = @{EntityNaming.PropertyName(c)}");
+            .Select(c => $"[{c.Name}] = @{EntityNaming.PropertyName(c, corrections)}");
         var updateSet = string.Join(", ", updateSetParts);
 
         return (pkColName, pkType, pkProp, fullTable, selectCols, insertCols, insertColList, insertParamList, updateSet);
     }
 
-    static string ProjectionBody(string name, IReadOnlyList<Column> allCols, string srcVar, int indent)
+    static string ProjectionBody(string name, IReadOnlyList<Column> allCols, string srcVar, int indent, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var pad = new string(' ', indent);
         var sb2 = new StringBuilder();
@@ -88,7 +88,7 @@ public sealed class DapperRepositoryImplEmitter : IEmitter
         sb2.AppendLine($"{pad}{{");
         foreach (var col in allCols)
         {
-            var prop = EntityNaming.PropertyName(col);
+            var prop = EntityNaming.PropertyName(col, corrections);
             sb2.AppendLine($"{pad}    {prop} = {srcVar}.{prop},");
         }
         sb2.Append($"{pad}}}");
@@ -99,8 +99,9 @@ public sealed class DapperRepositoryImplEmitter : IEmitter
 
     static string BuildDapperReadRepository(EmitterContext ctx, NamedEntity entity, string project)
     {
+        var corrections = ctx.NamingCorrections;
         var name   = entity.EntityTypeName;
-        var (pkColName, pkType, pkProp, fullTable, selectCols, _, _, _, _) = BuildSqlParts(entity);
+        var (pkColName, pkType, pkProp, fullTable, selectCols, _, _, _, _) = BuildSqlParts(entity, corrections);
 
         var ns        = $"{CleanLayout.InfrastructureNamespace(project)}.Repositories";
         var dataAbsNs = $"{CleanLayout.InfrastructureNamespace(project)}.Data";
@@ -169,9 +170,10 @@ public sealed class DapperRepositoryImplEmitter : IEmitter
 
     static string BuildDapperWriteRepository(EmitterContext ctx, NamedEntity entity, string project)
     {
+        var corrections = ctx.NamingCorrections;
         var name   = entity.EntityTypeName;
         var table  = entity.Table;
-        var (pkColName, pkType, pkProp, fullTable, selectCols, insertCols, insertColList, insertParamList, updateSet) = BuildSqlParts(entity);
+        var (pkColName, pkType, pkProp, fullTable, selectCols, insertCols, insertColList, insertParamList, updateSet) = BuildSqlParts(entity, corrections);
         var pkCol = table.Columns.First(c =>
             string.Equals(c.Name, pkColName, System.StringComparison.OrdinalIgnoreCase));
 
@@ -215,14 +217,14 @@ public sealed class DapperRepositoryImplEmitter : IEmitter
             sb.AppendLine($"            \" OUTPUT INSERTED.[{pkColName}]\" +");
             sb.AppendLine($"            \" VALUES ({insertParamList})\";");
             sb.AppendLine($"        var newId = await conn.ExecuteScalarAsync<{pkType}>(sql, entity).ConfigureAwait(false);");
-            sb.AppendLine($"        var model = {ProjectionBody(name, allCols, "entity", 8)};");
+            sb.AppendLine($"        var model = {ProjectionBody(name, allCols, "entity", 8, corrections)};");
             sb.AppendLine($"        return model with {{ {pkProp} = newId }};");
         }
         else
         {
             sb.AppendLine($"        const string sql = \"INSERT INTO {fullTable} ({insertColList}) VALUES ({insertParamList})\";");
             sb.AppendLine("        await conn.ExecuteAsync(sql, entity).ConfigureAwait(false);");
-            sb.AppendLine($"        return {ProjectionBody(name, allCols, "entity", 8)};");
+            sb.AppendLine($"        return {ProjectionBody(name, allCols, "entity", 8, corrections)};");
         }
         sb.AppendLine("    }");
         sb.AppendLine();
@@ -252,9 +254,10 @@ public sealed class DapperRepositoryImplEmitter : IEmitter
 
     static string BuildDapperMonolithicRepository(EmitterContext ctx, NamedEntity entity, string project)
     {
+        var corrections = ctx.NamingCorrections;
         var name   = entity.EntityTypeName;
         var table  = entity.Table;
-        var (pkColName, pkType, pkProp, fullTable, selectCols, insertCols, insertColList, insertParamList, updateSet) = BuildSqlParts(entity);
+        var (pkColName, pkType, pkProp, fullTable, selectCols, insertCols, insertColList, insertParamList, updateSet) = BuildSqlParts(entity, corrections);
         var pkCol = table.Columns.First(c =>
             string.Equals(c.Name, pkColName, System.StringComparison.OrdinalIgnoreCase));
 
@@ -333,14 +336,14 @@ public sealed class DapperRepositoryImplEmitter : IEmitter
             sb.AppendLine($"            \" OUTPUT INSERTED.[{pkColName}]\" +");
             sb.AppendLine($"            \" VALUES ({insertParamList})\";");
             sb.AppendLine($"        var newId = await conn.ExecuteScalarAsync<{pkType}>(sql, entity).ConfigureAwait(false);");
-            sb.AppendLine($"        var model = {ProjectionBody(name, allCols, "entity", 8)};");
+            sb.AppendLine($"        var model = {ProjectionBody(name, allCols, "entity", 8, corrections)};");
             sb.AppendLine($"        return model with {{ {pkProp} = newId }};");
         }
         else
         {
             sb.AppendLine($"        const string sql = \"INSERT INTO {fullTable} ({insertColList}) VALUES ({insertParamList})\";");
             sb.AppendLine("        await conn.ExecuteAsync(sql, entity).ConfigureAwait(false);");
-            sb.AppendLine($"        return {ProjectionBody(name, allCols, "entity", 8)};");
+            sb.AppendLine($"        return {ProjectionBody(name, allCols, "entity", 8, corrections)};");
         }
         sb.AppendLine("    }");
         sb.AppendLine();

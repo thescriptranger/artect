@@ -23,7 +23,8 @@ public static class YamlReader
             "splitRepositoriesByIntent",
             "generatedByLabel","generateInitialMigration","crud","apiVersioning","auth",
             "includeTestsProject","includeDockerAssets","partitionStoredProceduresBySchema",
-            "includeChildCollectionsInResponses","validateForeignKeyReferences","schemas","connectionString"
+            "includeChildCollectionsInResponses","validateForeignKeyReferences","schemas","connectionString",
+            "namingCorrections"
         };
         foreach (var k in values.Keys)
             if (!knownKeys.Contains(k)) throw new YamlException($"Unknown key '{k}' in artect.yaml.");
@@ -45,7 +46,8 @@ public static class YamlReader
             PartitionStoredProceduresBySchema: ParseBool(Require("partitionStoredProceduresBySchema")),
             IncludeChildCollectionsInResponses: ParseBool(Require("includeChildCollectionsInResponses")),
             ValidateForeignKeyReferences: ParseBool(Require("validateForeignKeyReferences")),
-            Schemas: ParseStringList(Require("schemas")));
+            Schemas: ParseStringList(Require("schemas")),
+            NamingCorrections: values.TryGetValue("namingCorrections", out var nc) ? ParseMap(nc) : new Dictionary<string, string>());
     }
 
     static Dictionary<string, string> Parse(string content)
@@ -54,26 +56,48 @@ public static class YamlReader
         var lines = content.Replace("\r\n", "\n").Split('\n');
         string? currentKey = null;
         var listAccum = new List<string>();
+        var mapAccum = new List<string>(); // accumulates "subkey: subvalue" pairs for block-map keys
+        bool inMap = false;
+
+        void FlushCurrent()
+        {
+            if (currentKey is null) return;
+            if (inMap)
+                values[currentKey] = "{" + string.Join("|", mapAccum) + "}";
+            else
+                values[currentKey] = "[" + string.Join(",", listAccum) + "]";
+            currentKey = null;
+            listAccum.Clear();
+            mapAccum.Clear();
+            inMap = false;
+        }
+
         foreach (var rawLine in lines)
         {
             var line = StripComment(rawLine);
             if (string.IsNullOrWhiteSpace(line))
             {
-                if (currentKey is not null) { values[currentKey] = "[" + string.Join(",", listAccum) + "]"; currentKey = null; listAccum.Clear(); }
+                FlushCurrent();
                 continue;
             }
+            // List item
             if (line.StartsWith("  - ", StringComparison.Ordinal))
             {
                 if (currentKey is null) throw new YamlException($"Stray list item: '{line}'");
                 listAccum.Add(line.Substring(4).Trim());
+                inMap = false;
                 continue;
             }
-            if (currentKey is not null)
+            // Indented map entry (two-space indent, not a list item)
+            if (line.StartsWith("  ", StringComparison.Ordinal) && !line.StartsWith("  - ", StringComparison.Ordinal))
             {
-                values[currentKey] = "[" + string.Join(",", listAccum) + "]";
-                currentKey = null;
-                listAccum.Clear();
+                if (currentKey is null) throw new YamlException($"Stray indented line: '{line}'");
+                inMap = true;
+                mapAccum.Add(line.Trim());
+                continue;
             }
+            // Non-indented line — flush any accumulated block
+            FlushCurrent();
             var colon = line.IndexOf(':');
             if (colon < 0) throw new YamlException($"Invalid line (no colon): '{line}'");
             var key = line.Substring(0, colon).Trim();
@@ -85,8 +109,31 @@ public static class YamlReader
             }
             values[key] = value;
         }
-        if (currentKey is not null) values[currentKey] = "[" + string.Join(",", listAccum) + "]";
+        FlushCurrent();
         return values;
+    }
+
+    static IReadOnlyDictionary<string, string> ParseMap(string s)
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        var t = s.Trim();
+        if (t.Length == 0 || t == "{}") return result;
+        // Strip outer braces if present
+        if (t.StartsWith("{") && t.EndsWith("}"))
+            t = t.Substring(1, t.Length - 2);
+        // Entries are separated by '|'; each entry is "key: value"
+        var entries = t.Split('|');
+        foreach (var entry in entries)
+        {
+            var e = entry.Trim();
+            if (e.Length == 0) continue;
+            var colon = e.IndexOf(':');
+            if (colon < 0) throw new YamlException($"Invalid namingCorrections entry: '{e}'");
+            var k = e.Substring(0, colon).Trim();
+            var v = e.Substring(colon + 1).Trim();
+            result[k] = v;
+        }
+        return result;
     }
 
     static string StripComment(string line)

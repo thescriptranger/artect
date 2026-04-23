@@ -26,8 +26,8 @@ public sealed class ValidatorEmitter : IEmitter
             var pkCols = entity.Table.PrimaryKey!.ColumnNames
                 .ToHashSet(System.StringComparer.OrdinalIgnoreCase);
 
-            var createBodyLines = BuildBodyLines(entity, pkCols, isCreate: true, ctx.Config.ValidateForeignKeyReferences);
-            var updateBodyLines = BuildBodyLines(entity, pkCols, isCreate: false, ctx.Config.ValidateForeignKeyReferences);
+            var createBodyLines = BuildBodyLines(entity, pkCols, isCreate: true, ctx.Config.ValidateForeignKeyReferences, ctx.NamingCorrections);
+            var updateBodyLines = BuildBodyLines(entity, pkCols, isCreate: false, ctx.Config.ValidateForeignKeyReferences, ctx.NamingCorrections);
 
             var data = new
             {
@@ -53,7 +53,8 @@ public sealed class ValidatorEmitter : IEmitter
         NamedEntity entity,
         HashSet<string> pkCols,
         bool isCreate,
-        bool validateForeignKeyRefs)
+        bool validateForeignKeyRefs,
+        System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var lines = new List<object>();
 
@@ -64,7 +65,7 @@ public sealed class ValidatorEmitter : IEmitter
             // For Create requests, skip server-generated / identity PK columns entirely.
             if (isCreate && pkCols.Contains(c.Name) && c.IsServerGenerated) continue;
 
-            var prop = EntityNaming.PropertyName(c);
+            var prop = EntityNaming.PropertyName(c, corrections);
 
             if (c.ClrType == ClrType.String && !c.IsNullable)
             {
@@ -84,7 +85,7 @@ public sealed class ValidatorEmitter : IEmitter
         if (entity.Table.CheckConstraints.Count > 0)
         {
             var propByCol = entity.Table.Columns
-                .ToDictionary(c => c.Name, c => EntityNaming.PropertyName(c), System.StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(c => c.Name, c => EntityNaming.PropertyName(c, corrections), System.StringComparer.OrdinalIgnoreCase);
 
             foreach (var cc in entity.Table.CheckConstraints)
             {
@@ -108,7 +109,7 @@ public sealed class ValidatorEmitter : IEmitter
                     // Skip PK columns that are also FKs (composite PKs / join tables already filtered).
                     if (isCreate && pkColSet.Contains(pair.FromColumn)) continue;
 
-                    var prop = EntityNaming.PropertyName(col);
+                    var prop = EntityNaming.PropertyName(col, corrections);
                     Add($"// TODO: wire existence query for {prop} referencing {fk.ToTable}.{pair.ToColumn}");
                     Add($"if (request.{prop} == default)");
                     Add($"    errors.Add(new ValidationError(\"{prop}\", \"foreignKey\", \"{prop} must reference an existing {fk.ToTable}.\"));");
@@ -192,5 +193,5 @@ public sealed class ValidatorEmitter : IEmitter
     }
 
     static string PropFor(Dictionary<string, string> propByCol, string col)
-        => propByCol.TryGetValue(col, out var name) ? name : CasingHelper.ToPascalCase(col);
+        => propByCol.TryGetValue(col, out var name) ? name : CasingHelper.ToPascalCase(col); // corrections already applied in propByCol
 }

@@ -93,20 +93,20 @@ public sealed class DbContextEmitter : IEmitter
                 ? $"{entityNs}.{typeName}"
                 : typeName;
 
-            EmitEntityConfig(sb, entity, typeRef, model, entityNs, collidedEntityNames);
+            EmitEntityConfig(sb, entity, typeRef, model, entityNs, collidedEntityNames, ctx.NamingCorrections);
         }
 
         // ── View configurations ───────────────────────────────────────────
         foreach (var view in graph.Views)
         {
-            var viewTypeName = CasingHelper.ToPascalCase(Pluralizer.Singularize(view.Name));
+            var viewTypeName = CasingHelper.ToPascalCase(Pluralizer.Singularize(view.Name), ctx.NamingCorrections);
             sb.AppendLine($"        modelBuilder.Entity<{viewTypeName}>(b =>");
             sb.AppendLine("        {");
             sb.AppendLine($"            b.ToView(\"{view.Name}\", \"{view.Schema}\");");
             sb.AppendLine("            b.HasNoKey();");
             foreach (var c in view.Columns)
             {
-                var prop = EntityNaming.PropertyName(c);
+                var prop = EntityNaming.PropertyName(c, ctx.NamingCorrections);
                 sb.AppendLine($"            b.Property(e => e.{prop}).HasColumnName(\"{c.Name}\");");
             }
             sb.AppendLine("        });");
@@ -125,7 +125,8 @@ public sealed class DbContextEmitter : IEmitter
         string typeRef,
         NamedSchemaModel model,
         string entityNs,
-        HashSet<string> collidedEntityNames)
+        HashSet<string> collidedEntityNames,
+        System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var table  = entity.Table;
 
@@ -140,7 +141,8 @@ public sealed class DbContextEmitter : IEmitter
             {
                 var pkProp = EntityNaming.PropertyName(
                     table.Columns.First(c =>
-                        string.Equals(c.Name, pk.ColumnNames[0], System.StringComparison.OrdinalIgnoreCase)));
+                        string.Equals(c.Name, pk.ColumnNames[0], System.StringComparison.OrdinalIgnoreCase)),
+                    corrections);
                 sb.AppendLine($"            b.HasKey(e => e.{pkProp});");
 
                 // Server-generated PK → ValueGeneratedOnAdd
@@ -155,7 +157,8 @@ public sealed class DbContextEmitter : IEmitter
                 var members = string.Join(", ", pk.ColumnNames.Select(n =>
                     "e." + EntityNaming.PropertyName(
                         table.Columns.First(c =>
-                            string.Equals(c.Name, n, System.StringComparison.OrdinalIgnoreCase)))));
+                            string.Equals(c.Name, n, System.StringComparison.OrdinalIgnoreCase)),
+                        corrections)));
                 sb.AppendLine($"            b.HasKey(e => new {{ {members} }});");
             }
         }
@@ -165,7 +168,8 @@ public sealed class DbContextEmitter : IEmitter
             var members = string.Join(", ", entity.ReferenceNavigations.Select(n =>
                 "e." + EntityNaming.PropertyName(
                     table.Columns.First(c =>
-                        string.Equals(c.Name, n.ColumnPairs[0].FromColumn, System.StringComparison.OrdinalIgnoreCase)))));
+                        string.Equals(c.Name, n.ColumnPairs[0].FromColumn, System.StringComparison.OrdinalIgnoreCase)),
+                    corrections)));
             sb.AppendLine($"            b.HasKey(e => new {{ {members} }});");
         }
         else
@@ -176,7 +180,7 @@ public sealed class DbContextEmitter : IEmitter
         // Column mappings
         foreach (var col in table.Columns)
         {
-            var prop = EntityNaming.PropertyName(col);
+            var prop = EntityNaming.PropertyName(col, corrections);
             sb.AppendLine($"            b.Property(e => e.{prop}).HasColumnName(\"{col.Name}\");");
         }
 
@@ -195,7 +199,8 @@ public sealed class DbContextEmitter : IEmitter
             // Find the FK column property name
             var fkProp = EntityNaming.PropertyName(
                 table.Columns.First(c =>
-                    string.Equals(c.Name, nav.ColumnPairs[0].FromColumn, System.StringComparison.OrdinalIgnoreCase)));
+                    string.Equals(c.Name, nav.ColumnPairs[0].FromColumn, System.StringComparison.OrdinalIgnoreCase)),
+                corrections);
 
             // Determine whether the FK column is nullable → optional relationship
             var fkCol = table.Columns.First(c =>
@@ -232,7 +237,7 @@ public sealed class DbContextEmitter : IEmitter
         foreach (var uq in table.UniqueConstraints)
         {
             var members = string.Join(", ", uq.ColumnNames.Select(col =>
-                "e." + PropFor(table, col)));
+                "e." + PropFor(table, col, corrections)));
             sb.AppendLine($"            b.HasAlternateKey(e => new {{ {members} }}).HasName(\"{uq.Name}\");");
         }
 
@@ -240,7 +245,7 @@ public sealed class DbContextEmitter : IEmitter
         foreach (var ix in table.Indexes)
         {
             var members = string.Join(", ", ix.KeyColumns.Select(col =>
-                "e." + PropFor(table, col)));
+                "e." + PropFor(table, col, corrections)));
             var uniqueSuffix = ix.IsUnique ? ".IsUnique()" : string.Empty;
             sb.AppendLine($"            b.HasIndex(e => new {{ {members} }}).HasDatabaseName(\"{ix.Name}\"){uniqueSuffix};");
         }
@@ -256,13 +261,13 @@ public sealed class DbContextEmitter : IEmitter
         sb.AppendLine();
     }
 
-    static string PropFor(Table table, string colName)
+    static string PropFor(Table table, string colName, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var col = table.Columns.FirstOrDefault(c =>
             string.Equals(c.Name, colName, System.StringComparison.OrdinalIgnoreCase));
         return col is not null
-            ? EntityNaming.PropertyName(col)
-            : CasingHelper.ToPascalCase(colName);
+            ? EntityNaming.PropertyName(col, corrections)
+            : CasingHelper.ToPascalCase(colName, corrections);
     }
 
     static string SequenceClrType(string sqlType) => sqlType.ToLowerInvariant() switch

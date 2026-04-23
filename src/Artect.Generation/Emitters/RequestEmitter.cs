@@ -23,7 +23,7 @@ public sealed class RequestEmitter : IEmitter
                 .ToHashSet(System.StringComparer.OrdinalIgnoreCase);
 
             // Create request: skip PK (identity) columns
-            var createProps = BuildProperties(entity.Table, pkCols, isCreate: true);
+            var createProps = BuildProperties(entity.Table, pkCols, isCreate: true, ctx.NamingCorrections);
             var createData = new
             {
                 Namespace = ns,
@@ -36,7 +36,7 @@ public sealed class RequestEmitter : IEmitter
             list.Add(new EmittedFile(createPath, createRendered));
 
             // Update request: include PK columns
-            var updateProps = BuildProperties(entity.Table, pkCols, isCreate: false);
+            var updateProps = BuildProperties(entity.Table, pkCols, isCreate: false, ctx.NamingCorrections);
             var updateData = new
             {
                 Namespace = ns,
@@ -52,7 +52,7 @@ public sealed class RequestEmitter : IEmitter
         return list;
     }
 
-    static IReadOnlyList<object> BuildProperties(Table table, HashSet<string> pkCols, bool isCreate)
+    static IReadOnlyList<object> BuildProperties(Table table, HashSet<string> pkCols, bool isCreate, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var result = new List<object>();
         foreach (var c in table.Columns)
@@ -76,7 +76,7 @@ public sealed class RequestEmitter : IEmitter
 
             result.Add(new
             {
-                PropertyName = EntityNaming.PropertyName(c),
+                PropertyName = EntityNaming.PropertyName(c, corrections),
                 ClrTypeWithNullability = clrTypeWithNullability,
                 Initializer = initializer,
                 Required = required,

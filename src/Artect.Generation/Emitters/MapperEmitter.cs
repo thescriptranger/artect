@@ -30,7 +30,7 @@ public sealed class MapperEmitter : IEmitter
             // All columns (for ToDto, ToEntity, ToResponse).
             var allCols = entity.Table.Columns.Select(c => new
             {
-                PropertyName = EntityNaming.PropertyName(c),
+                PropertyName = EntityNaming.PropertyName(c, ctx.NamingCorrections),
             }).ToList();
 
             // Non-PK, non-server-generated columns (for Create/Update mappers).
@@ -38,7 +38,7 @@ public sealed class MapperEmitter : IEmitter
                 .Where(c => !(pkCols.Contains(c.Name) && c.IsServerGenerated))
                 .Select(c => new
                 {
-                    PropertyName = EntityNaming.PropertyName(c),
+                    PropertyName = EntityNaming.PropertyName(c, ctx.NamingCorrections),
                 })
                 .ToList();
 

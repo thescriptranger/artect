@@ -42,7 +42,7 @@ public sealed class StoredProceduresEmitter : IEmitter
 
             foreach (var schemaGroup in bySchema)
             {
-                var schemaPascal = CasingHelper.ToPascalCase(schemaGroup.Key);
+                var schemaPascal = CasingHelper.ToPascalCase(schemaGroup.Key, ctx.NamingCorrections);
                 var ifaceName    = $"I{schemaPascal}StoredProcedures";
                 var implName     = $"{schemaPascal}StoredProcedures";
                 var sprocs       = schemaGroup.OrderBy(sp => sp.Name, System.StringComparer.Ordinal).ToList();
