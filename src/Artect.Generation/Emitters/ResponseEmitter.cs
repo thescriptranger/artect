@@ -13,6 +13,7 @@ public sealed class ResponseEmitter : IEmitter
         var template = TemplateParser.Parse(ctx.Templates.Load("Response.cs.artect"));
         var list = new List<EmittedFile>();
         var ns = $"{CleanLayout.SharedNamespace(ctx.Config.ProjectName)}.Responses";
+        var includeChildren = ctx.Config.IncludeChildCollectionsInResponses;
 
         foreach (var entity in ctx.Model.Entities)
         {
@@ -38,11 +39,23 @@ public sealed class ResponseEmitter : IEmitter
                 };
             }).ToList();
 
+            var childCollections = includeChildren
+                ? entity.CollectionNavigations
+                    .Select(n => new
+                    {
+                        TypeName = n.TargetEntityTypeName,
+                        PropertyName = n.PropertyName,
+                    })
+                    .ToList()
+                : new();
+
             var data = new
             {
                 Namespace = ns,
                 EntityName = entity.EntityTypeName,
                 Properties = props,
+                HasChildCollections = includeChildren && childCollections.Count > 0,
+                ChildCollections = childCollections,
             };
             var rendered = Renderer.Render(template, data);
             var path = CleanLayout.SharedResponsePath(ctx.Config.ProjectName, entity.EntityTypeName);

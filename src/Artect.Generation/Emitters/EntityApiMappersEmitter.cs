@@ -62,7 +62,7 @@ public sealed class EntityApiMappersEmitter : IEmitter
         if (ctx.Config.Crud.HasFlag(CrudOperation.GetList))
             EmitListMapper(sb, entity, corrections);
 
-        EmitResponseMapper(sb, entity, corrections);
+        EmitResponseMapper(sb, entity, corrections, ctx.Config.IncludeChildCollectionsInResponses);
 
         sb.AppendLine("}");
         return new EmittedFile(
@@ -156,15 +156,22 @@ public sealed class EntityApiMappersEmitter : IEmitter
         sb.AppendLine();
     }
 
-    static void EmitResponseMapper(StringBuilder sb, NamedEntity entity, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
+    static void EmitResponseMapper(StringBuilder sb, NamedEntity entity, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections, bool includeChildren)
     {
         var e = entity.EntityTypeName;
-        var assigns = string.Join(", ", entity.Table.Columns.Select(c =>
+        var scalarAssigns = entity.Table.Columns.Select(c =>
         {
             var name = EntityNaming.PropertyName(c, corrections);
             return $"{name} = m.{name}";
-        }));
+        });
+
+        var childAssigns = includeChildren
+            ? entity.CollectionNavigations.Select(n =>
+                $"{n.PropertyName} = m.{n.PropertyName}.Select(c => c.ToResponse()).ToArray()")
+            : System.Linq.Enumerable.Empty<string>();
+
+        var allAssigns = string.Join(", ", scalarAssigns.Concat(childAssigns));
         sb.AppendLine($"    public static {e}Response ToResponse(this {e}Model m) =>");
-        sb.AppendLine($"        new() {{ {assigns} }};");
+        sb.AppendLine($"        new() {{ {allAssigns} }};");
     }
 }

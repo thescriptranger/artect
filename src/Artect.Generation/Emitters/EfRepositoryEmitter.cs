@@ -73,19 +73,15 @@ public sealed class EfRepositoryEmitter : IEmitter
         var modelsNs  = CleanLayout.ApplicationModelsNamespace(project);
 
         var allCols = entity.Table.Columns.ToList();
+        var entitiesByName = ctx.Model.Entities
+            .Where(e => !e.IsJoinTable)
+            .ToDictionary(e => e.EntityTypeName, e => e);
+        var readChildNavs = ctx.Config.IncludeChildCollectionsInResponses
+            ? entity.CollectionNavigations
+            : (IReadOnlyList<NamedNavigation>)System.Array.Empty<NamedNavigation>();
+
         string ProjectionBody(string srcVar)
-        {
-            var sb2 = new StringBuilder();
-            sb2.AppendLine($"new {name}Model");
-            sb2.AppendLine("            {");
-            foreach (var col in allCols)
-            {
-                var prop = EntityNaming.PropertyName(col, corrections);
-                sb2.AppendLine($"                {prop} = {srcVar}.{prop},");
-            }
-            sb2.Append("            }");
-            return sb2.ToString();
-        }
+            => BuildProjection(srcVar, name, allCols, readChildNavs, entitiesByName, corrections, outerIndent: "            ");
 
         var sb = new StringBuilder();
         sb.AppendLine("using Microsoft.EntityFrameworkCore;");
@@ -165,19 +161,16 @@ public sealed class EfRepositoryEmitter : IEmitter
         var entityNs  = $"{CleanLayout.DomainNamespace(project)}.Entities";
 
         var allCols = entity.Table.Columns.ToList();
+        var entitiesByName = ctx.Model.Entities
+            .Where(e => !e.IsJoinTable)
+            .ToDictionary(e => e.EntityTypeName, e => e);
+
+        // Write path (CreateAsync return) never projects children — the newly-created
+        // entity has no attached children. Pass an empty nav list regardless of flag.
         string ProjectionBody(string srcVar)
-        {
-            var sb2 = new StringBuilder();
-            sb2.AppendLine($"new {name}Model");
-            sb2.AppendLine("        {");
-            foreach (var col in allCols)
-            {
-                var prop = EntityNaming.PropertyName(col, corrections);
-                sb2.AppendLine($"            {prop} = {srcVar}.{prop},");
-            }
-            sb2.Append("        }");
-            return sb2.ToString();
-        }
+            => BuildProjection(srcVar, name, allCols,
+                (IReadOnlyList<NamedNavigation>)System.Array.Empty<NamedNavigation>(),
+                entitiesByName, corrections, outerIndent: "        ");
 
         var sb = new StringBuilder();
         sb.AppendLine("using Microsoft.EntityFrameworkCore;");
@@ -255,19 +248,23 @@ public sealed class EfRepositoryEmitter : IEmitter
         var entityNs  = $"{CleanLayout.DomainNamespace(project)}.Entities";
 
         var allCols = entity.Table.Columns.ToList();
-        string ProjectionBody(string srcVar)
-        {
-            var sb2 = new StringBuilder();
-            sb2.AppendLine($"new {name}Model");
-            sb2.AppendLine("            {");
-            foreach (var col in allCols)
-            {
-                var prop = EntityNaming.PropertyName(col, corrections);
-                sb2.AppendLine($"                {prop} = {srcVar}.{prop},");
-            }
-            sb2.Append("            }");
-            return sb2.ToString();
-        }
+        var entitiesByName = ctx.Model.Entities
+            .Where(e => !e.IsJoinTable)
+            .ToDictionary(e => e.EntityTypeName, e => e);
+        var readChildNavs = ctx.Config.IncludeChildCollectionsInResponses
+            ? entity.CollectionNavigations
+            : (IReadOnlyList<NamedNavigation>)System.Array.Empty<NamedNavigation>();
+
+        // Read projection (List + GetById) — includes child collections when flag is on.
+        string ReadProjectionBody(string srcVar)
+            => BuildProjection(srcVar, name, allCols, readChildNavs, entitiesByName, corrections, outerIndent: "            ");
+
+        // Write projection (Create return) — never includes child collections;
+        // the newly-created entity has no child rows yet.
+        string WriteProjectionBody(string srcVar)
+            => BuildProjection(srcVar, name, allCols,
+                (IReadOnlyList<NamedNavigation>)System.Array.Empty<NamedNavigation>(),
+                entitiesByName, corrections, outerIndent: "        ");
 
         var sb = new StringBuilder();
         sb.AppendLine("using Microsoft.EntityFrameworkCore;");
@@ -301,7 +298,7 @@ public sealed class EfRepositoryEmitter : IEmitter
         sb.AppendLine("        var items = await query");
         sb.AppendLine("            .Skip((page - 1) * pageSize)");
         sb.AppendLine("            .Take(pageSize)");
-        sb.AppendLine($"            .Select(e => {ProjectionBody("e")})");
+        sb.AppendLine($"            .Select(e => {ReadProjectionBody("e")})");
         sb.AppendLine("            .ToListAsync(ct).ConfigureAwait(false);");
         sb.AppendLine($"        return new PagedResult<{name}Model>");
         sb.AppendLine("        {");
@@ -318,7 +315,7 @@ public sealed class EfRepositoryEmitter : IEmitter
         sb.AppendLine("    {");
         sb.AppendLine($"        return await _db.{dbset}.AsNoTracking()");
         sb.AppendLine($"            .Where(e => e.{pkProp} == id)");
-        sb.AppendLine($"            .Select(e => {ProjectionBody("e")})");
+        sb.AppendLine($"            .Select(e => {ReadProjectionBody("e")})");
         sb.AppendLine("            .FirstOrDefaultAsync(ct).ConfigureAwait(false);");
         sb.AppendLine("    }");
         sb.AppendLine();
@@ -327,7 +324,7 @@ public sealed class EfRepositoryEmitter : IEmitter
         sb.AppendLine($"    public async Task<{name}Model> CreateAsync({name} entity, CancellationToken ct)");
         sb.AppendLine("    {");
         sb.AppendLine($"        await _db.{dbset}.AddAsync(entity, ct).ConfigureAwait(false);");
-        sb.AppendLine($"        return {ProjectionBody("entity")};");
+        sb.AppendLine($"        return {WriteProjectionBody("entity")};");
         sb.AppendLine("    }");
         sb.AppendLine();
 
@@ -368,5 +365,46 @@ public sealed class EfRepositoryEmitter : IEmitter
             return SqlTypeMap.ToCs(c.ClrType);
         });
         return "(" + string.Join(", ", parts) + ")";
+    }
+
+    /// <summary>
+    /// Emits a <c>new {EntityName}Model { ... }</c> object-initializer projection.
+    /// When <paramref name="childNavs"/> is non-empty, each collection navigation is
+    /// projected inline using the child's scalar columns only — depth-1 expansion per
+    /// PRD §4.2 prompt #14. Nested children default to empty via the Model record's
+    /// <c>= System.Array.Empty&lt;&gt;()</c> initializer.
+    /// </summary>
+    static string BuildProjection(
+        string srcVar,
+        string entityTypeName,
+        IReadOnlyList<Column> scalarCols,
+        IReadOnlyList<NamedNavigation> childNavs,
+        IReadOnlyDictionary<string, NamedEntity> entitiesByName,
+        IReadOnlyDictionary<string, string> corrections,
+        string outerIndent)
+    {
+        var innerIndent = outerIndent + "    ";
+        var sb = new StringBuilder();
+        sb.AppendLine($"new {entityTypeName}Model");
+        sb.AppendLine($"{outerIndent}{{");
+        foreach (var col in scalarCols)
+        {
+            var prop = EntityNaming.PropertyName(col, corrections);
+            sb.AppendLine($"{innerIndent}{prop} = {srcVar}.{prop},");
+        }
+        foreach (var nav in childNavs)
+        {
+            if (!entitiesByName.TryGetValue(nav.TargetEntityTypeName, out var childEntity)) continue;
+            sb.AppendLine($"{innerIndent}{nav.PropertyName} = {srcVar}.{nav.PropertyName}.Select(c => new {nav.TargetEntityTypeName}Model");
+            sb.AppendLine($"{innerIndent}{{");
+            foreach (var childCol in childEntity.Table.Columns)
+            {
+                var childProp = EntityNaming.PropertyName(childCol, corrections);
+                sb.AppendLine($"{innerIndent}    {childProp} = c.{childProp},");
+            }
+            sb.AppendLine($"{innerIndent}}}).ToArray(),");
+        }
+        sb.Append($"{outerIndent}}}");
+        return sb.ToString();
     }
 }

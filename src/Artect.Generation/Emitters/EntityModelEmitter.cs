@@ -18,10 +18,23 @@ public sealed class EntityModelEmitter : IEmitter
     {
         var template = TemplateParser.Parse(ctx.Templates.Load("EntityModel.cs.artect"));
         var list = new List<EmittedFile>();
+        var includeChildren = ctx.Config.IncludeChildCollectionsInResponses;
+
         foreach (var entity in ctx.Model.Entities)
         {
             if (entity.IsJoinTable) continue;
             if (!entity.HasPrimaryKey) continue;
+
+            var childCollections = includeChildren
+                ? entity.CollectionNavigations
+                    .Select(n => new
+                    {
+                        TypeName = n.TargetEntityTypeName,
+                        PropertyName = n.PropertyName,
+                    })
+                    .ToList()
+                : new();
+
             var data = new
             {
                 Namespace = CleanLayout.ApplicationModelsNamespace(ctx.Config.ProjectName),
@@ -32,6 +45,8 @@ public sealed class EntityModelEmitter : IEmitter
                     PropertyName = Artect.Naming.EntityNaming.PropertyName(c, ctx.NamingCorrections),
                     Initializer = c.ClrType == ClrType.String && !c.IsNullable ? " = default!;" : string.Empty,
                 }).ToList(),
+                HasChildCollections = includeChildren && childCollections.Count > 0,
+                ChildCollections = childCollections,
             };
             var rendered = Renderer.Render(template, data);
             var path = CleanLayout.ApplicationModelsPath(ctx.Config.ProjectName, $"{entity.EntityTypeName}Model");
