@@ -1,3 +1,25 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: ValidationResult.cs.artect
-// Purpose (from plan): shared ValidationResult + ValidationError used by validators.
+using {{ ErrorsNamespace }};
+
+namespace {{ Namespace }};
+
+public sealed class ValidationResult
+{
+    public bool IsValid { get; private set; } = true;
+    public System.Collections.Generic.IReadOnlyList<ValidationError> Errors => _errors;
+
+    private readonly System.Collections.Generic.List<ValidationError> _errors = new();
+
+    public static ValidationResult Success() => new();
+
+    public static ValidationResult Fail(params ValidationError[] errors)
+    {
+        var result = new ValidationResult { IsValid = false };
+        result._errors.AddRange(errors);
+        return result;
+    }
+}
+
+public interface IValidator<TRequest>
+{
+    ValidationResult Validate(TRequest request);
+}

@@ -1,3 +1,9 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: ApiProblem.cs.artect
-// Purpose (from plan): record for typed 400 body.
+using {{ ErrorsNamespace }};
+
+namespace {{ Namespace }};
+
+public sealed record ApiProblem(
+    string Title,
+    int Status,
+    string? Detail,
+    System.Collections.Generic.IReadOnlyList<ValidationError>? Errors);

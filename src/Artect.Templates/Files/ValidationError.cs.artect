@@ -1,3 +1,3 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: ValidationError.cs.artect
-// Purpose (from plan): record (string Field, string Code, string Message).
+namespace {{ Namespace }};
+
+public sealed record ValidationError(string Field, string Code, string Message);

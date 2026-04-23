@@ -1,3 +1,19 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: Request.cs.artect
-// Purpose (from plan): takes a Kind (Create/Update) variable; [Required], [StringLength], [Range] attributes from validation rules.
+using System.ComponentModel.DataAnnotations;
+
+namespace {{ Namespace }};
+
+public sealed class {{ Kind }}{{ EntityName }}Request
+{
+{{# for prop in Properties }}
+{{# if prop.Required }}
+    [Required]
+{{/if}}
+{{# if prop.HasStringLength }}
+    [StringLength({{ prop.StringLength }})]
+{{/if}}
+{{# if prop.HasRange }}
+    [Range({{ prop.RangeMin }}, {{ prop.RangeMax }})]
+{{/if}}
+    public {{ prop.ClrTypeWithNullability }} {{ prop.PropertyName }} { get; set; }{{ prop.Initializer }}
+{{/for}}
+}

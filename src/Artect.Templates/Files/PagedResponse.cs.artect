@@ -1,3 +1,12 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: PagedResponse.cs.artect
-// Purpose (from plan): PagedResponse<T> with Items, Page, PageSize, TotalCount.
+namespace {{ Namespace }};
+
+public sealed class PagedResponse<T>
+{
+    public System.Collections.Generic.IReadOnlyList<T> Items { get; init; } = System.Array.Empty<T>();
+    public int Page { get; init; }
+    public int PageSize { get; init; }
+    public long TotalCount { get; init; }
+    public int TotalPages => PageSize == 0 ? 0 : (int)System.Math.Ceiling((double)TotalCount / PageSize);
+    public bool HasPreviousPage => Page > 1;
+    public bool HasNextPage => Page < TotalPages;
+}

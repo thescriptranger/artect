@@ -1,3 +1,8 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: Response.cs.artect
-// Purpose (from plan): plain POCO, no attributes.
+namespace {{ Namespace }};
+
+public sealed class {{ EntityName }}Response
+{
+{{# for prop in Properties }}
+    public {{ prop.ClrTypeWithNullability }} {{ prop.PropertyName }} { get; set; }{{ prop.Initializer }}
+{{/for}}
+}
