@@ -1,3 +1,8 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: MinimalApiEndpoints.cs.artect
-// Purpose (from plan): static Map<Plural>Endpoints method with one MapGet/MapPost/etc. per enabled CRUD op; body depends on I<Entity>Repository when repositories are on, on DbContext/IDbConnectionFactory otherwise.
+// NOTE: This template is intentionally left as a comment-only stub.
+// MinimalApiEndpointEmitter builds the output directly via StringBuilder
+// (no Handlebars tokens — too many nested conditionals for the .artect DSL).
+// The loader entry below is retained so TemplateLoader.Load("MinimalApiEndpoints.cs.artect") succeeds
+// and the file remains discoverable in the repo.
+//
+// Logical name : MinimalApiEndpoints.cs.artect
+// Owner emitter: Artect.Generation.Emitters.MinimalApiEndpointEmitter

@@ -1,3 +1,5 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: EfRepository.cs.artect
-// Purpose (from plan): EF Core implementation; constructor injects <Name>DbContext; uses DbSet<T> directly.
+// NOTE: This template is intentionally left as a comment-only stub.
+// EfRepositoryEmitter builds the output directly via StringBuilder.
+//
+// Logical name : EfRepository.cs.artect
+// Owner emitter: Artect.Generation.Emitters.EfRepositoryEmitter

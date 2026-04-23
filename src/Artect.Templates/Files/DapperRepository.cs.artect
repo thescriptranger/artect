@@ -1,3 +1,5 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: DapperRepository.cs.artect
-// Purpose (from plan): Dapper implementation; constructor injects IDbConnectionFactory; parameterized SQL only.
+// NOTE: This template is intentionally left as a comment-only stub.
+// DapperRepositoryImplEmitter builds the output directly via StringBuilder.
+//
+// Logical name : DapperRepository.cs.artect
+// Owner emitter: Artect.Generation.Emitters.DapperRepositoryImplEmitter

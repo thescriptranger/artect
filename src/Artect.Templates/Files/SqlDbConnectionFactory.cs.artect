@@ -1,3 +1,5 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: SqlDbConnectionFactory.cs.artect
-// Purpose (from plan): thin IDbConnectionFactory + implementation for Dapper path.
+// NOTE: This template is intentionally left as a comment-only stub.
+// DapperConnectionFactoryEmitter builds the output directly via StringBuilder.
+//
+// Logical name : SqlDbConnectionFactory.cs.artect
+// Owner emitter: Artect.Generation.Emitters.DapperConnectionFactoryEmitter
