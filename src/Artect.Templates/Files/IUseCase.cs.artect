@@ -1,0 +1,9 @@
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace {{ Namespace }};
+
+public interface IUseCase<TRequest, TResult>
+{
+    Task<TResult> ExecuteAsync(TRequest request, CancellationToken ct);
+}

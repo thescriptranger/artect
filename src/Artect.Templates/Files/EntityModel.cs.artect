@@ -1,0 +1,8 @@
+namespace {{ Namespace }};
+
+public sealed record {{ EntityName }}Model
+{
+{{# for col in Columns }}
+    public {{ col.ClrTypeWithNullability }} {{ col.PropertyName }} { get; init; }{{ col.Initializer }}
+{{/for}}
+}

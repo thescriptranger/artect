@@ -1,0 +1,8 @@
+using {{ CommonNamespace }};
+{{# if HasModelsUsing }}
+using {{ ModelsNamespace }};
+{{/if}}
+
+namespace {{ Namespace }};
+
+public sealed record {{ QueryName }}{{ PkArgList }} : IQuery<{{ PayloadType }}>;

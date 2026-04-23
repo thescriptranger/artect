@@ -1,0 +1,8 @@
+namespace {{ Namespace }};
+
+/// <summary>Void analog for commands that don't return a payload. A single Value instance avoids allocations.</summary>
+public sealed record Unit
+{
+    public static readonly Unit Value = new();
+    private Unit() { }
+}

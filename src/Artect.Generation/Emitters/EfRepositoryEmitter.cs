@@ -11,6 +11,7 @@ namespace Artect.Generation.Emitters;
 /// Emits <c>&lt;Entity&gt;Repository : I&lt;Entity&gt;Repository</c> using EF Core.
 /// Only runs when <c>cfg.DataAccess == EfCore</c> AND <c>cfg.EmitRepositoriesAndAbstractions == true</c>.
 /// Constructor injects <c>&lt;Project&gt;DbContext _db</c>; methods use <c>_db.&lt;DbSet&gt;</c> directly.
+/// Projects entity → <c>&lt;Entity&gt;Model</c> inline via object-initializer <c>Select</c> so EF can translate.
 /// </summary>
 public sealed class EfRepositoryEmitter : IEmitter
 {
@@ -46,20 +47,37 @@ public sealed class EfRepositoryEmitter : IEmitter
                 string.Equals(c.Name, entity.Table.PrimaryKey!.ColumnNames[0],
                     System.StringComparison.OrdinalIgnoreCase)));
 
-        var ns          = $"{CleanLayout.InfrastructureNamespace(project)}.Repositories";
-        var dataAbsNs   = $"{CleanLayout.InfrastructureNamespace(project)}.Data";
-        var repoAbsNs   = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
-        var dtoNs       = $"{CleanLayout.ApplicationNamespace(project)}.Dtos";
-        var mappingsNs  = $"{CleanLayout.ApplicationNamespace(project)}.Mappings";
-        var respNs      = $"{CleanLayout.SharedNamespace(project)}.Responses";
+        var ns        = $"{CleanLayout.InfrastructureNamespace(project)}.Repositories";
+        var dataAbsNs = $"{CleanLayout.InfrastructureNamespace(project)}.Data";
+        var repoAbsNs = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
+        var commonNs  = CleanLayout.ApplicationCommonNamespace(project);
+        var modelsNs  = CleanLayout.ApplicationModelsNamespace(project);
+        var entityNs  = $"{CleanLayout.DomainNamespace(project)}.Entities";
+
+        var allCols = entity.Table.Columns.ToList();
+        // Inline projection — EF-translatable.
+        string ProjectionBody(string srcVar)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"new {name}Model");
+            sb.AppendLine("            {");
+            for (int i = 0; i < allCols.Count; i++)
+            {
+                var prop = EntityNaming.PropertyName(allCols[i]);
+                sb.AppendLine($"                {prop} = {srcVar}.{prop},");
+            }
+            sb.Append("            }");
+            return sb.ToString();
+        }
 
         var sb = new StringBuilder();
         sb.AppendLine("using Microsoft.EntityFrameworkCore;");
         sb.AppendLine($"using {dataAbsNs};");
         sb.AppendLine($"using {repoAbsNs};");
-        sb.AppendLine($"using {dtoNs};");
-        sb.AppendLine($"using {mappingsNs};");
-        sb.AppendLine($"using {respNs};");
+        sb.AppendLine($"using {commonNs};");
+        sb.AppendLine($"using {modelsNs};");
+        sb.AppendLine($"using {entityNs};");
+        sb.AppendLine("using System.Linq;");
         sb.AppendLine("using System.Threading;");
         sb.AppendLine("using System.Threading.Tasks;");
         sb.AppendLine();
@@ -76,7 +94,7 @@ public sealed class EfRepositoryEmitter : IEmitter
         sb.AppendLine();
 
         // ListAsync
-        sb.AppendLine($"    public async Task<PagedResponse<{name}Dto>> ListAsync(int page, int pageSize, CancellationToken ct)");
+        sb.AppendLine($"    public async Task<PagedResult<{name}Model>> ListAsync(int page, int pageSize, CancellationToken ct)");
         sb.AppendLine("    {");
         sb.AppendLine($"        var query = _db.{dbset}.AsNoTracking();");
         sb.AppendLine("        // Extension point: customize the IQueryable/SQL here");
@@ -84,9 +102,9 @@ public sealed class EfRepositoryEmitter : IEmitter
         sb.AppendLine("        var items = await query");
         sb.AppendLine("            .Skip((page - 1) * pageSize)");
         sb.AppendLine("            .Take(pageSize)");
-        sb.AppendLine($"            .Select(e => e.ToDto())");
+        sb.AppendLine($"            .Select(e => {ProjectionBody("e")})");
         sb.AppendLine("            .ToListAsync(ct).ConfigureAwait(false);");
-        sb.AppendLine($"        return new PagedResponse<{name}Dto>");
+        sb.AppendLine($"        return new PagedResult<{name}Model>");
         sb.AppendLine("        {");
         sb.AppendLine("            Items = items,");
         sb.AppendLine("            Page = page,");
@@ -97,30 +115,28 @@ public sealed class EfRepositoryEmitter : IEmitter
         sb.AppendLine();
 
         // GetByIdAsync
-        sb.AppendLine($"    public async Task<{name}Dto?> GetByIdAsync({pkType} id, CancellationToken ct)");
+        sb.AppendLine($"    public async Task<{name}Model?> GetByIdAsync({pkType} id, CancellationToken ct)");
         sb.AppendLine("    {");
-        sb.AppendLine($"        var entity = await _db.{dbset}.AsNoTracking()");
-        sb.AppendLine($"            .FirstOrDefaultAsync(e => e.{pkProp} == id, ct).ConfigureAwait(false);");
-        sb.AppendLine("        return entity?.ToDto();");
+        sb.AppendLine($"        return await _db.{dbset}.AsNoTracking()");
+        sb.AppendLine($"            .Where(e => e.{pkProp} == id)");
+        sb.AppendLine($"            .Select(e => {ProjectionBody("e")})");
+        sb.AppendLine("            .FirstOrDefaultAsync(ct).ConfigureAwait(false);");
         sb.AppendLine("    }");
         sb.AppendLine();
 
         // CreateAsync
-        sb.AppendLine($"    public async Task<{name}Dto> CreateAsync({name}Dto dto, CancellationToken ct)");
+        sb.AppendLine($"    public async Task<{name}Model> CreateAsync({name} entity, CancellationToken ct)");
         sb.AppendLine("    {");
-        sb.AppendLine("        var entity = dto.ToEntity();");
-        sb.AppendLine($"        _db.{dbset}.Add(entity);");
-        sb.AppendLine("        return entity.ToDto();");
+        sb.AppendLine($"        await _db.{dbset}.AddAsync(entity, ct).ConfigureAwait(false);");
+        sb.AppendLine($"        return {ProjectionBody("entity")};");
         sb.AppendLine("    }");
         sb.AppendLine();
 
         // UpdateAsync
-        sb.AppendLine($"    public async Task UpdateAsync({name}Dto dto, CancellationToken ct)");
+        sb.AppendLine($"    public Task UpdateAsync({name} entity, CancellationToken ct)");
         sb.AppendLine("    {");
-        sb.AppendLine($"        var entity = await _db.{dbset}");
-        sb.AppendLine($"            .FirstOrDefaultAsync(e => e.{pkProp} == dto.{pkProp}, ct).ConfigureAwait(false);");
-        sb.AppendLine("        if (entity is null) { return; }");
-        sb.AppendLine("        entity.UpdateFromDto(dto);");
+        sb.AppendLine($"        _db.{dbset}.Update(entity);");
+        sb.AppendLine("        return Task.CompletedTask;");
         sb.AppendLine("    }");
         sb.AppendLine();
 

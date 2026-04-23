@@ -11,6 +11,7 @@ namespace Artect.Generation.Emitters;
 /// Emits <c>&lt;Entity&gt;Repository : I&lt;Entity&gt;Repository</c> using Dapper.
 /// Only runs when <c>cfg.DataAccess == Dapper</c> AND <c>cfg.EmitRepositoriesAndAbstractions == true</c>.
 /// Constructor injects <c>IDbConnectionFactory</c>; all SQL is parameterized.
+/// Uses Application-internal <c>&lt;Entity&gt;Model</c> and <c>PagedResult&lt;T&gt;</c>.
 /// </summary>
 public sealed class DapperRepositoryImplEmitter : IEmitter
 {
@@ -59,21 +60,37 @@ public sealed class DapperRepositoryImplEmitter : IEmitter
             .Select(c => $"[{c.Name}] = @{EntityNaming.PropertyName(c)}");
         var updateSet = string.Join(", ", updateSetParts);
 
-        var ns          = $"{CleanLayout.InfrastructureNamespace(project)}.Repositories";
-        var dataAbsNs   = $"{CleanLayout.InfrastructureNamespace(project)}.Data";
-        var repoAbsNs   = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
-        var dtoNs       = $"{CleanLayout.ApplicationNamespace(project)}.Dtos";
-        var mappingsNs  = $"{CleanLayout.ApplicationNamespace(project)}.Mappings";
-        var respNs      = $"{CleanLayout.SharedNamespace(project)}.Responses";
+        var ns        = $"{CleanLayout.InfrastructureNamespace(project)}.Repositories";
+        var dataAbsNs = $"{CleanLayout.InfrastructureNamespace(project)}.Data";
+        var repoAbsNs = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
+        var commonNs  = CleanLayout.ApplicationCommonNamespace(project);
+        var modelsNs  = CleanLayout.ApplicationModelsNamespace(project);
+        var entityNs  = $"{CleanLayout.DomainNamespace(project)}.Entities";
+
+        // Inline projection from entity -> model (used on Create return path).
+        var allCols = table.Columns.ToList();
+        string ProjectionBody(string srcVar)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"new {name}Model");
+            sb.AppendLine("        {");
+            for (int i = 0; i < allCols.Count; i++)
+            {
+                var prop = EntityNaming.PropertyName(allCols[i]);
+                sb.AppendLine($"            {prop} = {srcVar}.{prop},");
+            }
+            sb.Append("        }");
+            return sb.ToString();
+        }
 
         var sb = new StringBuilder();
         sb.AppendLine("using Dapper;");
         sb.AppendLine("using System.Data;");
         sb.AppendLine($"using {dataAbsNs};");
         sb.AppendLine($"using {repoAbsNs};");
-        sb.AppendLine($"using {dtoNs};");
-        sb.AppendLine($"using {mappingsNs};");
-        sb.AppendLine($"using {respNs};");
+        sb.AppendLine($"using {commonNs};");
+        sb.AppendLine($"using {modelsNs};");
+        sb.AppendLine($"using {entityNs};");
         sb.AppendLine("using System.Linq;");
         sb.AppendLine("using System.Threading;");
         sb.AppendLine("using System.Threading.Tasks;");
@@ -91,7 +108,7 @@ public sealed class DapperRepositoryImplEmitter : IEmitter
         sb.AppendLine();
 
         // ListAsync (server-side paging with OFFSET/FETCH)
-        sb.AppendLine($"    public async Task<PagedResponse<{name}Dto>> ListAsync(int page, int pageSize, CancellationToken ct)");
+        sb.AppendLine($"    public async Task<PagedResult<{name}Model>> ListAsync(int page, int pageSize, CancellationToken ct)");
         sb.AppendLine("    {");
         sb.AppendLine("        using var conn = _connections.CreateOpenConnection();");
         sb.AppendLine($"        const string countSql = \"SELECT COUNT(*) FROM {fullTable}\";");
@@ -102,8 +119,8 @@ public sealed class DapperRepositoryImplEmitter : IEmitter
         sb.AppendLine($"            \" OFFSET @skip ROWS FETCH NEXT @take ROWS ONLY\";");
         sb.AppendLine("        var skip = (page - 1) * pageSize;");
         sb.AppendLine("        var totalCount = await conn.ExecuteScalarAsync<int>(countSql).ConfigureAwait(false);");
-        sb.AppendLine($"        var rows = await conn.QueryAsync<{name}Dto>(itemSql, new {{ skip, take = pageSize }}).ConfigureAwait(false);");
-        sb.AppendLine($"        return new PagedResponse<{name}Dto>");
+        sb.AppendLine($"        var rows = await conn.QueryAsync<{name}Model>(itemSql, new {{ skip, take = pageSize }}).ConfigureAwait(false);");
+        sb.AppendLine($"        return new PagedResult<{name}Model>");
         sb.AppendLine("        {");
         sb.AppendLine("            Items = rows.AsList(),");
         sb.AppendLine("            Page = page,");
@@ -114,16 +131,16 @@ public sealed class DapperRepositoryImplEmitter : IEmitter
         sb.AppendLine();
 
         // GetByIdAsync
-        sb.AppendLine($"    public async Task<{name}Dto?> GetByIdAsync({pkType} id, CancellationToken ct)");
+        sb.AppendLine($"    public async Task<{name}Model?> GetByIdAsync({pkType} id, CancellationToken ct)");
         sb.AppendLine("    {");
         sb.AppendLine("        using var conn = _connections.CreateOpenConnection();");
         sb.AppendLine($"        const string sql = \"SELECT {selectCols} FROM {fullTable} WHERE [{pkColName}] = @id\";");
-        sb.AppendLine($"        return await conn.QuerySingleOrDefaultAsync<{name}Dto>(sql, new {{ id }}).ConfigureAwait(false);");
+        sb.AppendLine($"        return await conn.QuerySingleOrDefaultAsync<{name}Model>(sql, new {{ id }}).ConfigureAwait(false);");
         sb.AppendLine("    }");
         sb.AppendLine();
 
         // CreateAsync
-        sb.AppendLine($"    public async Task<{name}Dto> CreateAsync({name}Dto dto, CancellationToken ct)");
+        sb.AppendLine($"    public async Task<{name}Model> CreateAsync({name} entity, CancellationToken ct)");
         sb.AppendLine("    {");
         sb.AppendLine("        using var conn = _connections.CreateOpenConnection();");
         if (pkCol.IsServerGenerated)
@@ -132,24 +149,25 @@ public sealed class DapperRepositoryImplEmitter : IEmitter
             sb.AppendLine($"            \"INSERT INTO {fullTable} ({insertColList})\" +");
             sb.AppendLine($"            \" OUTPUT INSERTED.[{pkColName}]\" +");
             sb.AppendLine($"            \" VALUES ({insertParamList})\";");
-            sb.AppendLine($"        var newId = await conn.ExecuteScalarAsync<{pkType}>(sql, dto).ConfigureAwait(false);");
-            sb.AppendLine($"        dto = dto with {{ {pkProp} = newId }};");
+            sb.AppendLine($"        var newId = await conn.ExecuteScalarAsync<{pkType}>(sql, entity).ConfigureAwait(false);");
+            sb.AppendLine($"        var model = {ProjectionBody("entity")};");
+            sb.AppendLine($"        return model with {{ {pkProp} = newId }};");
         }
         else
         {
             sb.AppendLine($"        const string sql = \"INSERT INTO {fullTable} ({insertColList}) VALUES ({insertParamList})\";");
-            sb.AppendLine("        await conn.ExecuteAsync(sql, dto).ConfigureAwait(false);");
+            sb.AppendLine("        await conn.ExecuteAsync(sql, entity).ConfigureAwait(false);");
+            sb.AppendLine($"        return {ProjectionBody("entity")};");
         }
-        sb.AppendLine("        return dto;");
         sb.AppendLine("    }");
         sb.AppendLine();
 
         // UpdateAsync
-        sb.AppendLine($"    public async Task UpdateAsync({name}Dto dto, CancellationToken ct)");
+        sb.AppendLine($"    public async Task UpdateAsync({name} entity, CancellationToken ct)");
         sb.AppendLine("    {");
         sb.AppendLine("        using var conn = _connections.CreateOpenConnection();");
         sb.AppendLine($"        const string sql = \"UPDATE {fullTable} SET {updateSet} WHERE [{pkColName}] = @{pkProp}\";");
-        sb.AppendLine("        await conn.ExecuteAsync(sql, dto).ConfigureAwait(false);");
+        sb.AppendLine("        await conn.ExecuteAsync(sql, entity).ConfigureAwait(false);");
         sb.AppendLine("    }");
         sb.AppendLine();
 

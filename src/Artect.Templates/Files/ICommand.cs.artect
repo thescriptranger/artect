@@ -1,0 +1,7 @@
+namespace {{ Namespace }};
+
+/// <summary>Marker interface for command requests (state-changing). Used to filter pipeline behaviors like TransactionBehavior.</summary>
+public interface ICommand { }
+
+/// <summary>Marker interface for commands that produce a payload of type TPayload on success.</summary>
+public interface ICommand<TPayload> : ICommand { }

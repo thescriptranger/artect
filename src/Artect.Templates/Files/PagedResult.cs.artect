@@ -1,0 +1,14 @@
+using System.Collections.Generic;
+
+namespace {{ Namespace }};
+
+public sealed record PagedResult<T>
+{
+    public IReadOnlyList<T> Items { get; init; } = System.Array.Empty<T>();
+    public int Page { get; init; }
+    public int PageSize { get; init; }
+    public long TotalCount { get; init; }
+    public int TotalPages => PageSize == 0 ? 0 : (int)((TotalCount + PageSize - 1) / PageSize);
+    public bool HasPreviousPage => Page > 1;
+    public bool HasNextPage => Page < TotalPages;
+}

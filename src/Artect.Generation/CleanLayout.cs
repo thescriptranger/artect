@@ -56,6 +56,18 @@ public static class CleanLayout
     public static string DomainCommonPath(string root, string className) => $"{DomainDir(root)}/Common/{className}.cs";
     public static string DomainCommonNamespace(string root) => $"{root}.Domain.Common";
 
+    // Application-internal types (Phase C)
+    public static string ApplicationCommonPath(string root, string className) => $"{ApplicationDir(root)}/Common/{className}.cs";
+    public static string ApplicationCommonNamespace(string root) => $"{root}.Application.Common";
+    public static string ApplicationErrorsPath(string root, string className) => $"{ApplicationDir(root)}/Errors/{className}.cs";
+    public static string ApplicationErrorsNamespace(string root) => $"{root}.Application.Errors";
+    public static string ApplicationCommandsPath(string root, string className) => $"{ApplicationDir(root)}/Commands/{className}.cs";
+    public static string ApplicationCommandsNamespace(string root) => $"{root}.Application.Commands";
+    public static string ApplicationQueriesPath(string root, string className) => $"{ApplicationDir(root)}/Queries/{className}.cs";
+    public static string ApplicationQueriesNamespace(string root) => $"{root}.Application.Queries";
+    public static string ApplicationModelsPath(string root, string className) => $"{ApplicationDir(root)}/Models/{className}.cs";
+    public static string ApplicationModelsNamespace(string root) => $"{root}.Application.Models";
+
     public static string EntityBehaviorPath(string root, string entityName) => $"{DomainDir(root)}/Entities/{entityName}.Behavior.cs";
 
     public static string ApiNamespace(string root) => $"{root}.Api";

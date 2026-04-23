@@ -1,0 +1,10 @@
+using {{ CommonNamespace }};
+
+namespace {{ Namespace }};
+
+public sealed record {{ CommandName }} : ICommand<{{ PayloadType }}>
+{
+{{# for prop in Properties }}
+    public {{ prop.ClrTypeWithNullability }} {{ prop.PropertyName }} { get; init; }{{ prop.Initializer }}
+{{/for}}
+}

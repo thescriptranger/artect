@@ -12,7 +12,7 @@ public sealed class UseCaseResultEmitter : IEmitter
     {
         var project = ctx.Config.ProjectName;
         var ns      = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
-        var errNs   = $"{CleanLayout.SharedNamespace(project)}.Errors";
+        var errNs   = CleanLayout.ApplicationErrorsNamespace(project);
 
         var sb = new StringBuilder();
         sb.AppendLine($"using System.Collections.Generic;");
@@ -24,7 +24,7 @@ public sealed class UseCaseResultEmitter : IEmitter
         sb.AppendLine("{");
         sb.AppendLine("    public sealed record Success : UseCaseResult;");
         sb.AppendLine("    public sealed record NotFound(string EntityType, string Id) : UseCaseResult;");
-        sb.AppendLine("    public sealed record ValidationFailed(IReadOnlyList<ValidationError> Errors) : UseCaseResult;");
+        sb.AppendLine("    public sealed record ValidationFailed(IReadOnlyList<ApplicationError> Errors) : UseCaseResult;");
         sb.AppendLine("    public sealed record Conflict(string Message) : UseCaseResult;");
         sb.AppendLine("}");
         sb.AppendLine();
@@ -32,7 +32,7 @@ public sealed class UseCaseResultEmitter : IEmitter
         sb.AppendLine("{");
         sb.AppendLine("    public sealed record Success(T Value) : UseCaseResult<T>;");
         sb.AppendLine("    public sealed record NotFound(string EntityType, string Id) : UseCaseResult<T>;");
-        sb.AppendLine("    public sealed record ValidationFailed(IReadOnlyList<ValidationError> Errors) : UseCaseResult<T>;");
+        sb.AppendLine("    public sealed record ValidationFailed(IReadOnlyList<ApplicationError> Errors) : UseCaseResult<T>;");
         sb.AppendLine("    public sealed record Conflict(string Message) : UseCaseResult<T>;");
         sb.AppendLine("}");
 
