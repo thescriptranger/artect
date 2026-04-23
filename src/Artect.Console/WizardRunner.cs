@@ -25,6 +25,7 @@ public sealed class WizardRunner
         var framework = _prompt.AskEnum("3. Target framework", defaults.TargetFramework);
         var dataAccess = _prompt.AskEnum("4. Data access", defaults.DataAccess);
         var repos = _prompt.AskBool("5. Create repositories and abstractions", defaults.EmitRepositoriesAndAbstractions);
+        var useCases = _prompt.AskBool("5b. Emit per-operation use case interactors (strict Clean Architecture)", defaults.EmitUseCaseInteractors);
         var label = _prompt.AskString("6. Generated-by label", defaults.GeneratedByLabel);
         var migration = _prompt.AskBool("7. Generate initial migration", defaults.GenerateInitialMigration);
         var crudDefaults = new List<CrudOperation>
@@ -47,6 +48,7 @@ public sealed class WizardRunner
             TargetFramework = framework,
             DataAccess = dataAccess,
             EmitRepositoriesAndAbstractions = repos,
+            EmitUseCaseInteractors = useCases,
             GeneratedByLabel = label,
             GenerateInitialMigration = migration,
             Crud = crud,

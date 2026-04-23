@@ -36,6 +36,14 @@ public static class CleanLayout
     public static string SprocInterfacePath(string root, string name) => $"{ApplicationDir(root)}/StoredProcedures/{name}.cs";
     public static string DbFunctionsInterfacePath(string root) => $"{ApplicationDir(root)}/StoredProcedures/IDbFunctions.cs";
 
+    // Use-case paths
+    public static string UseCaseResultPath(string root) => $"{ApplicationDir(root)}/UseCases/UseCaseResult.cs";
+    public static string UseCaseResultExtensionsPath(string root) => $"{ApiDir(root)}/UseCaseResultExtensions.cs";
+    /// <param name="opName">Full operation name already including entity, e.g. "ListUsers", "GetUserById".</param>
+    public static string UseCaseInterfacePath(string root, string opName) => $"{ApplicationDir(root)}/Abstractions/UseCases/I{opName}UseCase.cs";
+    /// <param name="opName">Full operation name already including entity, e.g. "ListUsers", "GetUserById".</param>
+    public static string UseCaseImplPath(string root, string opName) => $"{ApplicationDir(root)}/UseCases/{opName}UseCase.cs";
+
     public static string ApiNamespace(string root) => $"{root}.Api";
     public static string ApplicationNamespace(string root) => $"{root}.Application";
     public static string DomainNamespace(string root) => $"{root}.Domain";

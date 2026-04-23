@@ -13,6 +13,7 @@ public static class ConfigOverrides
         TargetFramework = args.Get("framework") is { } f ? TargetFrameworkExtensions.FromMoniker(f) : baseline.TargetFramework,
         DataAccess = args.Get("data-access") is { } d ? Enum.Parse<DataAccessKind>(d, ignoreCase: true) : baseline.DataAccess,
         EmitRepositoriesAndAbstractions = ParseBool(args.Get("repositories"), baseline.EmitRepositoriesAndAbstractions),
+        EmitUseCaseInteractors = ParseBool(args.Get("use-case-interactors"), baseline.EmitUseCaseInteractors),
         GeneratedByLabel = args.Get("generated-by") ?? baseline.GeneratedByLabel,
         GenerateInitialMigration = ParseBool(args.Get("generate-migration"), baseline.GenerateInitialMigration),
         Crud = args.Get("crud") is { } c ? ParseCrud(c) : baseline.Crud,

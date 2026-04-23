@@ -42,6 +42,9 @@ public sealed class ProgramCsEmitter : IEmitter
         var appValidNs  = $"{CleanLayout.ApplicationNamespace(project)}.Validators";
         var sharedReqNs = $"{CleanLayout.SharedNamespace(project)}.Requests";
         var endpointNs  = $"{CleanLayout.ApiNamespace(project)}.Endpoints";
+        var ucAbsNs     = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.UseCases";
+        var ucImplNs    = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
+        var useInteractors = cfg.EmitUseCaseInteractors;
 
         // ── Collect entities that need validator DI (write-enabled, have PK, not join table) ──
         var validatedEntities = anyWrite
@@ -67,6 +70,12 @@ public sealed class ProgramCsEmitter : IEmitter
         {
             usings.Add(appAbsNs);
             usings.Add(infraRepoNs);
+        }
+
+        if (useInteractors && repos)
+        {
+            usings.Add(ucAbsNs);
+            usings.Add(ucImplNs);
         }
 
         if (validatedEntities.Count > 0)
@@ -116,6 +125,54 @@ public sealed class ProgramCsEmitter : IEmitter
             {
                 var name = entity.EntityTypeName;
                 sb.AppendLine($"builder.Services.AddScoped<I{name}Repository, {name}Repository>();");
+            }
+        }
+
+        // ── Use-case interactor DI ────────────────────────────────────────────
+        if (useInteractors && repos)
+        {
+            // Collect all registration lines and sort alpha-by-type-name for determinism.
+            var ucLines = new SortedSet<string>(System.StringComparer.Ordinal);
+
+            // Entities with PK — full set of enabled ops
+            foreach (var entity in model.Entities.Where(e => !e.IsJoinTable && e.HasPrimaryKey))
+            {
+                var name   = entity.EntityTypeName;
+                var plural = entity.DbSetPropertyName;
+
+                if ((crud & CrudOperation.GetList) != 0)
+                    ucLines.Add($"builder.Services.AddScoped<IList{plural}UseCase, List{plural}UseCase>();");
+                if ((crud & CrudOperation.GetById) != 0)
+                    ucLines.Add($"builder.Services.AddScoped<IGet{name}ByIdUseCase, Get{name}ByIdUseCase>();");
+                if ((crud & CrudOperation.Post) != 0)
+                    ucLines.Add($"builder.Services.AddScoped<ICreate{name}UseCase, Create{name}UseCase>();");
+                if ((crud & CrudOperation.Put) != 0)
+                    ucLines.Add($"builder.Services.AddScoped<IUpdate{name}UseCase, Update{name}UseCase>();");
+                if ((crud & CrudOperation.Patch) != 0)
+                    ucLines.Add($"builder.Services.AddScoped<IPatch{name}UseCase, Patch{name}UseCase>();");
+                if ((crud & CrudOperation.Delete) != 0)
+                    ucLines.Add($"builder.Services.AddScoped<IDelete{name}UseCase, Delete{name}UseCase>();");
+            }
+
+            // Pk-less entities — list only
+            foreach (var entity in model.Entities.Where(e => !e.IsJoinTable && !e.HasPrimaryKey))
+            {
+                var plural = entity.DbSetPropertyName;
+                ucLines.Add($"builder.Services.AddScoped<IList{plural}UseCase, List{plural}UseCase>();");
+            }
+
+            // Views — list only
+            foreach (var view in ctx.Graph.Views)
+            {
+                var plural = CasingHelper.ToPascalCase(Pluralizer.Pluralize(Pluralizer.Singularize(view.Name)));
+                ucLines.Add($"builder.Services.AddScoped<IList{plural}UseCase, List{plural}UseCase>();");
+            }
+
+            if (ucLines.Count > 0)
+            {
+                sb.AppendLine();
+                foreach (var line in ucLines)
+                    sb.AppendLine(line);
             }
         }
 
