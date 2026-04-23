@@ -1,3 +1,29 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: Validator.cs.artect
-// Purpose (from plan): imperative validator body with a Validate() method returning ValidationResult.
+using System.Collections.Generic;
+using {{ RequestsNamespace }};
+using {{ ErrorsNamespace }};
+
+namespace {{ Namespace }};
+
+public sealed partial class Create{{ EntityName }}RequestValidator : IValidator<Create{{ EntityName }}Request>
+{
+    public ValidationResult Validate(Create{{ EntityName }}Request request)
+    {
+        var errors = new List<ValidationError>();
+{{# for line in CreateBodyLines }}
+        {{ line.Text }}
+{{/for}}
+        return errors.Count == 0 ? ValidationResult.Success() : ValidationResult.Fail(errors.ToArray());
+    }
+}
+
+public sealed partial class Update{{ EntityName }}RequestValidator : IValidator<Update{{ EntityName }}Request>
+{
+    public ValidationResult Validate(Update{{ EntityName }}Request request)
+    {
+        var errors = new List<ValidationError>();
+{{# for line in UpdateBodyLines }}
+        {{ line.Text }}
+{{/for}}
+        return errors.Count == 0 ? ValidationResult.Success() : ValidationResult.Fail(errors.ToArray());
+    }
+}

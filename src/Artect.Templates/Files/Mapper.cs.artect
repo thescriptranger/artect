@@ -1,3 +1,63 @@
-// STUB: filled in when the corresponding emitter is implemented in Phase 9.
-// Logical name: Mapper.cs.artect
-// Purpose (from plan): static class with ToDto, ToEntity, ToResponse, ToRequest extension methods; partial void OnMapped(...) hooks.
+using {{ DtoNamespace }};
+using {{ EntityNamespace }};
+using {{ RequestsNamespace }};
+using {{ ResponsesNamespace }};
+
+namespace {{ Namespace }};
+
+public static partial class {{ EntityName }}Mappings
+{
+    /// <summary>Maps a <see cref="{{ EntityName }}"/> entity to a <see cref="{{ EntityName }}Dto"/>.</summary>
+    public static {{ EntityName }}Dto ToDto(this {{ EntityName }} entity)
+    {
+        var dto = new {{ EntityName }}Dto
+        {
+{{# for col in Columns }}
+            {{ col.PropertyName }} = entity.{{ col.PropertyName }},
+{{/for}}
+        };
+        OnMapped(entity, dto);
+        return dto;
+    }
+
+    /// <summary>Maps a <see cref="{{ EntityName }}Dto"/> back to a <see cref="{{ EntityName }}"/> entity.</summary>
+    public static {{ EntityName }} ToEntity(this {{ EntityName }}Dto dto) => new()
+    {
+{{# for col in Columns }}
+        {{ col.PropertyName }} = dto.{{ col.PropertyName }},
+{{/for}}
+    };
+
+    /// <summary>Maps a <see cref="{{ EntityName }}Dto"/> to a <see cref="{{ EntityName }}Response"/>.</summary>
+    public static {{ EntityName }}Response ToResponse(this {{ EntityName }}Dto dto)
+    {
+        var response = new {{ EntityName }}Response
+        {
+{{# for col in Columns }}
+            {{ col.PropertyName }} = dto.{{ col.PropertyName }},
+{{/for}}
+        };
+        OnMapped(dto, response);
+        return response;
+    }
+
+    /// <summary>Maps a <see cref="Create{{ EntityName }}Request"/> to a <see cref="{{ EntityName }}Dto"/> (server assigns PK).</summary>
+    public static {{ EntityName }}Dto ToDto(this Create{{ EntityName }}Request request) => new()
+    {
+{{# for col in NonPkColumns }}
+        {{ col.PropertyName }} = request.{{ col.PropertyName }},
+{{/for}}
+    };
+
+    /// <summary>Applies a <see cref="Update{{ EntityName }}Request"/> patch onto an existing <see cref="{{ EntityName }}Dto"/>.</summary>
+    public static {{ EntityName }}Dto Update(this {{ EntityName }}Dto dto, Update{{ EntityName }}Request request)
+    {
+{{# for col in NonPkColumns }}
+        dto.{{ col.PropertyName }} = request.{{ col.PropertyName }};
+{{/for}}
+        return dto;
+    }
+
+    static partial void OnMapped({{ EntityName }} entity, {{ EntityName }}Dto dto);
+    static partial void OnMapped({{ EntityName }}Dto dto, {{ EntityName }}Response response);
+}
