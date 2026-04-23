@@ -11,7 +11,9 @@ public static class GeneratedByRegionWrapper
         return new EmittedFile(file.RelativePath, WrapTypeDeclaration(file.Contents, label));
     }
 
-    static bool IsHookFile(string path) => path.EndsWith(".Extensions.cs", StringComparison.Ordinal);
+    static bool IsHookFile(string path) =>
+        path.EndsWith(".Extensions.cs", StringComparison.Ordinal) ||
+        path.EndsWith(".Behavior.cs", StringComparison.Ordinal);
 
     static EmittedFile InsertHookHeader(EmittedFile file)
     {

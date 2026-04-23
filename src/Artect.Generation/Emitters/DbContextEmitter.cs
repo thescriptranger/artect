@@ -218,6 +218,16 @@ public sealed class DbContextEmitter : IEmitter
             sb.AppendLine($"                .IsRequired({isRequired.ToString().ToLowerInvariant()});");
         }
 
+        // PropertyAccessMode.Field for all navigations (reference + collection)
+        foreach (var nav in entity.ReferenceNavigations)
+        {
+            sb.AppendLine($"            b.Navigation(e => e.{nav.PropertyName}).UsePropertyAccessMode(PropertyAccessMode.Field);");
+        }
+        foreach (var nav in entity.CollectionNavigations)
+        {
+            sb.AppendLine($"            b.Navigation(e => e.{nav.PropertyName}).UsePropertyAccessMode(PropertyAccessMode.Field);");
+        }
+
         // Unique constraints (alternate keys)
         foreach (var uq in table.UniqueConstraints)
         {

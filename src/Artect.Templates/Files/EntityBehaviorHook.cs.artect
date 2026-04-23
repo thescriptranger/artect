@@ -1,0 +1,15 @@
+// User extension point for {{ EntityName }}. Safe to edit.
+namespace {{ Namespace }};
+
+public sealed partial class {{ EntityName }}
+{
+    // Add domain behavior methods and invariants here.
+    //
+    // Examples:
+    //   public Result<{{ EntityName }}> ChangeEmail(string newEmail)
+    //   {
+    //       if (string.IsNullOrWhiteSpace(newEmail))
+    //           return new Result<{{ EntityName }}>.Failure(new[] { new DomainError("email", "required", "Email is required.") });
+    //       return new Result<{{ EntityName }}>.Success(this with { Email = newEmail });
+    //   }
+}

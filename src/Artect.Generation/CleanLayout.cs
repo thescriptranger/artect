@@ -53,6 +53,11 @@ public static class CleanLayout
     public static string ApplicationInstallerPath(string root) => $"{ApplicationDir(root)}/DependencyInjection/ApplicationServiceCollectionExtensions.cs";
     public static string InfrastructureInstallerPath(string root) => $"{InfrastructureDir(root)}/DependencyInjection/InfrastructureServiceCollectionExtensions.cs";
 
+    public static string DomainCommonPath(string root, string className) => $"{DomainDir(root)}/Common/{className}.cs";
+    public static string DomainCommonNamespace(string root) => $"{root}.Domain.Common";
+
+    public static string EntityBehaviorPath(string root, string entityName) => $"{DomainDir(root)}/Entities/{entityName}.Behavior.cs";
+
     public static string ApiNamespace(string root) => $"{root}.Api";
     public static string ApplicationNamespace(string root) => $"{root}.Application";
     public static string DomainNamespace(string root) => $"{root}.Domain";

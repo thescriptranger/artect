@@ -6,21 +6,42 @@ using {{ ns }};
 {{/if}}
 namespace {{ Namespace }};
 
-public sealed class {{ EntityName }}
+public sealed partial class {{ EntityName }}
 {
 {{# for col in Columns }}
-    public {{ col.ClrTypeWithNullability }} {{ col.PropertyName }} { get; set; }{{ col.Initializer }}
+    public {{ col.ClrTypeWithNullability }} {{ col.PropertyName }} { get; init; }{{ col.Initializer }}
 {{/for}}
 {{# if HasReferenceNavigations }}
 
 {{# for nav in ReferenceNavigations }}
-    public {{ nav.TypeName }}? {{ nav.PropertyName }} { get; set; }
+    public {{ nav.TypeName }}? {{ nav.PropertyName }} { get; init; }
 {{/for}}
 {{/if}}
 {{# if HasCollectionNavigations }}
 
 {{# for nav in CollectionNavigations }}
-    public System.Collections.Generic.ICollection<{{ nav.TypeName }}> {{ nav.PropertyName }} { get; set; } = new System.Collections.Generic.List<{{ nav.TypeName }}>();
+    public System.Collections.Generic.ICollection<{{ nav.TypeName }}> {{ nav.PropertyName }} { get; init; } = new System.Collections.Generic.List<{{ nav.TypeName }}>();
 {{/for}}
 {{/if}}
+
+    private {{ EntityName }}() { }
+
+    public static {{ DomainCommonNamespace }}.Result<{{ EntityName }}> Create(
+{{# for arg in CreateArgs }}
+        {{ arg.ClrTypeWithNullability }} {{ arg.ParamName }}{{ arg.Comma }}
+{{/for}}
+    )
+    {
+        var errors = new System.Collections.Generic.List<{{ DomainCommonNamespace }}.DomainError>();
+{{# for check in Invariants }}
+        {{ check.Line }}
+{{/for}}
+        if (errors.Count > 0) return new {{ DomainCommonNamespace }}.Result<{{ EntityName }}>.Failure(errors);
+        return new {{ DomainCommonNamespace }}.Result<{{ EntityName }}>.Success(new {{ EntityName }}
+        {
+{{# for arg in CreateArgs }}
+            {{ arg.PropertyName }} = {{ arg.ParamName }},
+{{/for}}
+        });
+    }
 }
