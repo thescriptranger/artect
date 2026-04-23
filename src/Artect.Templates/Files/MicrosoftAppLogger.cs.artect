@@ -1,0 +1,16 @@
+using Microsoft.Extensions.Logging;
+using {{ ApplicationPortsNamespace }};
+
+namespace {{ Namespace }};
+
+public sealed class MicrosoftAppLogger<T> : IAppLogger<T>
+{
+    readonly ILogger<T> _inner;
+    public MicrosoftAppLogger(ILogger<T> inner) => _inner = inner;
+
+    public void Debug(string message, params object?[] args) => _inner.LogDebug(message, args);
+    public void Information(string message, params object?[] args) => _inner.LogInformation(message, args);
+    public void Warning(string message, params object?[] args) => _inner.LogWarning(message, args);
+    public void Error(string message, params object?[] args) => _inner.LogError(message, args);
+    public void Error(System.Exception exception, string message, params object?[] args) => _inner.LogError(exception, message, args);
+}

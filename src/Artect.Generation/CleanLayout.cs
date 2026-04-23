@@ -44,6 +44,11 @@ public static class CleanLayout
     /// <param name="opName">Full operation name already including entity, e.g. "ListUsers", "GetUserById".</param>
     public static string UseCaseImplPath(string root, string opName) => $"{ApplicationDir(root)}/UseCases/{opName}UseCase.cs";
 
+    public static string PortsPath(string root, string className) => $"{ApplicationDir(root)}/Abstractions/Ports/{className}.cs";
+    public static string PortsNamespace(string root) => $"{root}.Application.Abstractions.Ports";
+    public static string LoggingPath(string root, string className) => $"{InfrastructureDir(root)}/Logging/{className}.cs";
+    public static string LoggingNamespace(string root) => $"{root}.Infrastructure.Logging";
+
     public static string ApiNamespace(string root) => $"{root}.Api";
     public static string ApplicationNamespace(string root) => $"{root}.Application";
     public static string DomainNamespace(string root) => $"{root}.Domain";

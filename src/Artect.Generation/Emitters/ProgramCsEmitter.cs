@@ -114,6 +114,15 @@ public sealed class ProgramCsEmitter : IEmitter
             sb.AppendLine("builder.Services.AddSingleton<IDbConnectionFactory, SqlDbConnectionFactory>();");
         }
 
+        // ── Logger port + clock DI (always registered) ───────────────────────
+        {
+            var appPortsNs  = CleanLayout.PortsNamespace(project);
+            var infraLogNs  = CleanLayout.LoggingNamespace(project);
+            sb.AppendLine();
+            sb.AppendLine($"builder.Services.AddScoped(typeof({appPortsNs}.IAppLogger<>), typeof({infraLogNs}.MicrosoftAppLogger<>));");
+            sb.AppendLine($"builder.Services.AddSingleton(System.TimeProvider.System);");
+        }
+
         // ── Repository DI (only when repos enabled) ───────────────────────────
         if (repos)
         {
