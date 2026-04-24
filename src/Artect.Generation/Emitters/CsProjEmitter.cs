@@ -28,12 +28,16 @@ public sealed class CsProjEmitter : IEmitter
 
     // ── Shared helpers ────────────────────────────────────────────────────────
 
-    static string SharedProps(string tfm) => $"""
+    static string SharedProps(string tfm, string rootAndAssembly) => $"""
           <TargetFramework>{tfm}</TargetFramework>
           <Nullable>enable</Nullable>
           <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+          <WarningsAsErrors />
           <ImplicitUsings>enable</ImplicitUsings>
-          <LangVersion>12.0</LangVersion>
+          <LangVersion>latest</LangVersion>
+          <RootNamespace>{rootAndAssembly}</RootNamespace>
+          <AssemblyName>{rootAndAssembly}</AssemblyName>
+          <NoWarn>$(NoWarn);CS1591</NoWarn>
         """;
 
     static string PackageRef(string id, string version) =>
@@ -52,7 +56,8 @@ public sealed class CsProjEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine("  <PropertyGroup>");
         sb.AppendLine($"    <OutputType>Exe</OutputType>");
-        sb.AppendLine(SharedProps(tfm));
+        sb.AppendLine(SharedProps(tfm, $"{project}.Api"));
+        sb.AppendLine($"    <InvariantGlobalization>false</InvariantGlobalization>");
         sb.AppendLine("  </PropertyGroup>");
         sb.AppendLine();
         sb.AppendLine("  <ItemGroup>");
@@ -91,7 +96,7 @@ public sealed class CsProjEmitter : IEmitter
         sb.AppendLine("<Project Sdk=\"Microsoft.NET.Sdk\">");
         sb.AppendLine();
         sb.AppendLine("  <PropertyGroup>");
-        sb.AppendLine(SharedProps(tfm));
+        sb.AppendLine(SharedProps(tfm, $"{project}.Application"));
         sb.AppendLine("  </PropertyGroup>");
         sb.AppendLine();
         sb.AppendLine("  <ItemGroup>");
@@ -121,7 +126,7 @@ public sealed class CsProjEmitter : IEmitter
         sb.AppendLine("<Project Sdk=\"Microsoft.NET.Sdk\">");
         sb.AppendLine();
         sb.AppendLine("  <PropertyGroup>");
-        sb.AppendLine(SharedProps(tfm));
+        sb.AppendLine(SharedProps(tfm, $"{project}.Domain"));
         sb.AppendLine("  </PropertyGroup>");
         sb.AppendLine();
         sb.Append("</Project>");
@@ -140,15 +145,16 @@ public sealed class CsProjEmitter : IEmitter
         sb.AppendLine("<Project Sdk=\"Microsoft.NET.Sdk\">");
         sb.AppendLine();
         sb.AppendLine("  <PropertyGroup>");
-        sb.AppendLine(SharedProps(tfm));
+        sb.AppendLine(SharedProps(tfm, $"{project}.Infrastructure"));
         sb.AppendLine("  </PropertyGroup>");
         sb.AppendLine();
         sb.AppendLine("  <ItemGroup>");
 
         if (cfg.DataAccess == DataAccessKind.EfCore)
         {
-            sb.AppendLine(PackageRef("Microsoft.EntityFrameworkCore", $"{major}.0.*"));
             sb.AppendLine(PackageRef("Microsoft.EntityFrameworkCore.SqlServer", $"{major}.0.*"));
+            sb.AppendLine(PackageRef("Microsoft.Extensions.Configuration.Abstractions", $"{major}.0.*"));
+            sb.AppendLine(PackageRef("Microsoft.Extensions.DependencyInjection.Abstractions", $"{major}.0.*"));
         }
         else // Dapper
         {
@@ -178,7 +184,17 @@ public sealed class CsProjEmitter : IEmitter
         sb.AppendLine("<Project Sdk=\"Microsoft.NET.Sdk\">");
         sb.AppendLine();
         sb.AppendLine("  <PropertyGroup>");
-        sb.AppendLine(SharedProps(tfm));
+        sb.AppendLine(SharedProps(tfm, $"{project}.Shared"));
+        sb.AppendLine($"    <IsPackable>true</IsPackable>");
+        sb.AppendLine($"    <PackageId>{project}.Shared</PackageId>");
+        sb.AppendLine($"    <Version>1.0.0</Version>");
+        sb.AppendLine($"    <Description>Wire contracts for the {project} API.</Description>");
+        sb.AppendLine($"    <!-- <PackageProjectUrl></PackageProjectUrl> -->");
+        sb.AppendLine($"    <!-- <PackageLicenseExpression>MIT</PackageLicenseExpression> -->");
+        sb.AppendLine($"    <!-- <RepositoryUrl></RepositoryUrl> -->");
+        sb.AppendLine($"    <!-- <Authors></Authors> -->");
+        sb.AppendLine($"    <!-- <Company></Company> -->");
+        sb.AppendLine($"    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>");
         sb.AppendLine("  </PropertyGroup>");
         sb.AppendLine();
         sb.Append("</Project>");

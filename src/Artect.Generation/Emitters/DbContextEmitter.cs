@@ -49,7 +49,7 @@ public sealed class DbContextEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine($"namespace {infraNs};");
         sb.AppendLine();
-        sb.AppendLine($"public sealed class {dbCtx} : DbContext");
+        sb.AppendLine($"public sealed partial class {dbCtx} : DbContext");
         sb.AppendLine("{");
         sb.AppendLine($"    public {dbCtx}(DbContextOptions<{dbCtx}> options) : base(options) {{ }}");
         sb.AppendLine();
@@ -65,7 +65,7 @@ public sealed class DbContextEmitter : IEmitter
                 ? $"{entityNs}.{typeName}"
                 : typeName;
 
-            sb.AppendLine($"    public DbSet<{typeRef}> {propertyName} {{ get; set; }} = default!;");
+            sb.AppendLine($"    public DbSet<{typeRef}> {propertyName} => Set<{typeRef}>();");
         }
 
         sb.AppendLine();
