@@ -81,6 +81,19 @@ public static class CleanLayout
     public static string ApplicationFeatureAbstractionsNamespace(string root, string entityTypeName) =>
         $"{root}.Application.Features.{Pluralize(entityTypeName)}.Abstractions";
 
+    // Phase E — Infrastructure helpers
+    public static string InfrastructureDataEntityPath(string root, string entityTypeName, string className) =>
+        $"{InfrastructureDir(root)}/Data/{Pluralize(entityTypeName)}/{className}.cs";
+
+    public static string InfrastructureDataEntityNamespace(string root, string entityTypeName) =>
+        $"{root}.Infrastructure.Data.{Pluralize(entityTypeName)}";
+
+    public static string InfrastructureMappingPath(string root, string className) =>
+        $"{InfrastructureDir(root)}/Mapping/{className}.cs";
+
+    public static string InfrastructureMappingNamespace(string root) =>
+        $"{root}.Infrastructure.Mapping";
+
     static string Pluralize(string entityTypeName) =>
         Artect.Naming.CasingHelper.ToPascalCase(
             Artect.Naming.Pluralizer.Pluralize(entityTypeName),

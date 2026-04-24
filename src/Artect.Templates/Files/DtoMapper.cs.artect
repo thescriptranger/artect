@@ -1,0 +1,25 @@
+namespace {{ Namespace }};
+
+/// <summary>
+/// Reflection-based scalar-only mapper. Copies matching public properties by name.
+/// Used by DataAccess classes for entity → Dto materialization where inline
+/// LINQ projection is overkill (typically GetByIdAsync and CreateAsync).
+/// </summary>
+public static class DtoMapper
+{
+    public static TDst Map<TSrc, TDst>(TSrc source) where TDst : new()
+    {
+        if (source is null) throw new System.ArgumentNullException(nameof(source));
+        var dst = new TDst();
+        var srcProps = typeof(TSrc).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+        var dstProps = typeof(TDst).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+        foreach (var dp in dstProps)
+        {
+            if (!dp.CanWrite && dp.SetMethod is null) continue;
+            var sp = System.Array.Find(srcProps, p => p.Name == dp.Name && p.PropertyType == dp.PropertyType);
+            if (sp is null) continue;
+            dp.SetValue(dst, sp.GetValue(source));
+        }
+        return dst;
+    }
+}
