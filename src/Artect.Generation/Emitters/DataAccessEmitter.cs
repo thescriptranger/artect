@@ -55,6 +55,15 @@ public sealed class DataAccessEmitter : IEmitter
         var allCols = entity.Table.Columns.ToList();
         var nonServerGen = allCols.Where(c => !c.IsServerGenerated).ToList();
 
+        var includeChildren = ctx.Config.IncludeChildCollectionsInResponses;
+        var childProjections = includeChildren
+            ? entity.CollectionNavigations
+                .Select(nav => BuildChildProjection(ctx, nav, corrections))
+                .Where(s => s is not null)
+                .Select(s => s!)
+                .ToList()
+            : new List<string>();
+
         var sb = new StringBuilder();
         sb.AppendLine($"using {dtosNs};");
         sb.AppendLine($"using {featureNs};");
@@ -80,9 +89,9 @@ public sealed class DataAccessEmitter : IEmitter
         sb.AppendLine();
 
         if ((crud & CrudOperation.GetList) != 0)
-            EmitGetPaged(sb, name, dbset, allCols, corrections);
+            EmitGetPaged(sb, name, dbset, allCols, corrections, childProjections);
         if ((crud & CrudOperation.GetById) != 0)
-            EmitGetById(sb, name, dbset, pkProp, pkType);
+            EmitGetById(sb, name, dbset, pkProp, pkType, allCols, corrections, childProjections);
         if ((crud & CrudOperation.Post) != 0)
             EmitCreate(sb, name, dbset, nonServerGen, corrections);
         if ((crud & CrudOperation.Put) != 0)
@@ -98,7 +107,8 @@ public sealed class DataAccessEmitter : IEmitter
         return new EmittedFile(path, sb.ToString());
     }
 
-    static void EmitGetPaged(StringBuilder sb, string name, string dbset, IReadOnlyList<Column> allCols, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
+    static void EmitGetPaged(StringBuilder sb, string name, string dbset, IReadOnlyList<Column> allCols,
+        System.Collections.Generic.IReadOnlyDictionary<string, string> corrections, IReadOnlyList<string> childProjections)
     {
         sb.AppendLine($"    public async Task<(IReadOnlyList<{name}Dto> Items, int TotalCount)> GetPagedAsync(int page, int pageSize, CancellationToken ct)");
         sb.AppendLine("    {");
@@ -115,6 +125,8 @@ public sealed class DataAccessEmitter : IEmitter
             var prop = EntityNaming.PropertyName(col, corrections);
             sb.AppendLine($"                {prop} = e.{prop},");
         }
+        foreach (var childLine in childProjections)
+            sb.AppendLine($"                {childLine}");
         sb.AppendLine("            })");
         sb.AppendLine("            .ToListAsync(ct)");
         sb.AppendLine("            .ConfigureAwait(false);");
@@ -123,16 +135,41 @@ public sealed class DataAccessEmitter : IEmitter
         sb.AppendLine();
     }
 
-    static void EmitGetById(StringBuilder sb, string name, string dbset, string pkProp, string pkType)
+    static void EmitGetById(StringBuilder sb, string name, string dbset, string pkProp, string pkType,
+        IReadOnlyList<Column> allCols, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections,
+        IReadOnlyList<string> childProjections)
     {
         sb.AppendLine($"    public async Task<{name}Dto?> GetByIdAsync({pkType} id, CancellationToken ct)");
         sb.AppendLine("    {");
-        sb.AppendLine($"        var entity = await _db.{dbset}.AsNoTracking()");
-        sb.AppendLine($"            .FirstOrDefaultAsync(e => e.{pkProp} == id, ct)");
+        sb.AppendLine($"        return await _db.{dbset}.AsNoTracking()");
+        sb.AppendLine($"            .Where(e => e.{pkProp} == id)");
+        sb.AppendLine($"            .Select(e => new {name}Dto");
+        sb.AppendLine("            {");
+        foreach (var col in allCols)
+        {
+            var prop = EntityNaming.PropertyName(col, corrections);
+            sb.AppendLine($"                {prop} = e.{prop},");
+        }
+        foreach (var childLine in childProjections)
+            sb.AppendLine($"                {childLine}");
+        sb.AppendLine("            })");
+        sb.AppendLine("            .FirstOrDefaultAsync(ct)");
         sb.AppendLine("            .ConfigureAwait(false);");
-        sb.AppendLine($"        return entity is null ? null : DtoMapper.Map<{name}, {name}Dto>(entity);");
         sb.AppendLine("    }");
         sb.AppendLine();
+    }
+
+    static string? BuildChildProjection(EmitterContext ctx, Artect.Naming.NamedNavigation nav,
+        System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
+    {
+        var childEntity = ctx.Model.Entities.FirstOrDefault(en =>
+            string.Equals(en.EntityTypeName, nav.TargetEntityTypeName, System.StringComparison.Ordinal));
+        if (childEntity is null) return null;
+
+        var childCols = childEntity.Table.Columns
+            .Select(c => $"{EntityNaming.PropertyName(c, corrections)} = c.{EntityNaming.PropertyName(c, corrections)}");
+        var inits = string.Join(", ", childCols);
+        return $"{nav.PropertyName} = e.{nav.PropertyName}.Select(c => new {nav.TargetEntityTypeName}Dto {{ {inits} }}).ToList(),";
     }
 
     static void EmitCreate(StringBuilder sb, string name, string dbset, IReadOnlyList<Column> nonServerGen, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
