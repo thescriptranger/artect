@@ -46,6 +46,7 @@ public static class EmitterRegistry
         new StoredProceduresEmitter(),
         new ValidationErrorEmitter(),
         new ValidationResultEmitter(),
-        new ValidatorEmitter(),
+        new ApiValidatorsEmitter(),
+        new ValidationResultExtensionsEmitter(),
     };
 }

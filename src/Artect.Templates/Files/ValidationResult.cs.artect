@@ -1,31 +1,20 @@
 namespace {{ Namespace }};
 
-/// <summary>
-/// Structured validation error produced by <c>IValidator&lt;T&gt;</c> implementations.
-/// Distinct from the wire-level <c>ValidationError</c> in the Shared layer — pipeline behaviors
-/// translate instances of this type into <c>ApplicationError</c> before returning through the
-/// use-case result channel.
-/// </summary>
-public sealed record ValidationError(string Field, string Code, string Message);
+public sealed record ValidationError(string PropertyName, string Message);
 
 public sealed class ValidationResult
 {
-    public bool IsValid { get; private set; } = true;
-    public System.Collections.Generic.IReadOnlyList<ValidationError> Errors => _errors;
-
     private readonly System.Collections.Generic.List<ValidationError> _errors = new();
 
-    public static ValidationResult Success() => new();
+    public System.Collections.Generic.IReadOnlyList<ValidationError> Errors => _errors;
 
-    public static ValidationResult Fail(params ValidationError[] errors)
-    {
-        var result = new ValidationResult { IsValid = false };
-        result._errors.AddRange(errors);
-        return result;
-    }
+    public bool IsValid => _errors.Count == 0;
+
+    public void Add(string propertyName, string message) =>
+        _errors.Add(new ValidationError(propertyName, message));
 }
 
-public interface IValidator<TRequest>
+public interface IValidator<in TDto>
 {
-    ValidationResult Validate(TRequest request);
+    ValidationResult Validate(TDto dto);
 }
