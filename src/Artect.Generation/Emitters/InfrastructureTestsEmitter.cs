@@ -66,7 +66,7 @@ public sealed class InfrastructureTestsEmitter : IEmitter
 
     static IEnumerable<EmittedFile> BuildEntityTests(EmitterContext ctx, string testsDir, NamedEntity entity)
     {
-        var split = ctx.Config.SplitRepositoriesByIntent;
+        var split = false;
         var project = ctx.Config.ProjectName;
 
         if (split)

@@ -61,7 +61,7 @@ public sealed class ApplicationTestsEmitter : IEmitter
 
     static IEnumerable<EmittedFile> BuildUseCaseTests(EmitterContext ctx, string testsDir, NamedEntity entity)
     {
-        var split = ctx.Config.SplitRepositoriesByIntent;
+        var split = false;
         var corrections = ctx.NamingCorrections;
 
         if (ctx.Config.Crud.HasFlag(CrudOperation.Post))
