@@ -50,8 +50,8 @@ public static class CleanLayout
     public static string ApplicationCommandsNamespace(string root) => $"{root}.Application.Commands";
     public static string ApplicationQueriesPath(string root, string className) => $"{ApplicationDir(root)}/Queries/{className}.cs";
     public static string ApplicationQueriesNamespace(string root) => $"{root}.Application.Queries";
-    public static string ApplicationModelsPath(string root, string className) => $"{ApplicationDir(root)}/Models/{className}.cs";
-    public static string ApplicationModelsNamespace(string root) => $"{root}.Application.Models";
+    public static string ApplicationDtosPath(string root, string className) => $"{ApplicationDir(root)}/Dtos/{className}.cs";
+    public static string ApplicationDtosNamespace(string root) => $"{root}.Application.Dtos";
 
     public static string EntityBehaviorPath(string root, string entityName) => $"{DomainDir(root)}/Entities/{entityName}.Behavior.cs";
 

@@ -79,7 +79,7 @@ public sealed class InfrastructureTestsEmitter : IEmitter
     {
         var e = entity.EntityTypeName;
         var repoAbsNs = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
-        var modelsNs = CleanLayout.ApplicationModelsNamespace(project);
+        var modelsNs = CleanLayout.ApplicationDtosNamespace(project);
         var commonNs = CleanLayout.ApplicationCommonNamespace(project);
 
         var pk = entity.Table.PrimaryKey!;

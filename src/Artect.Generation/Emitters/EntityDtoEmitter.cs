@@ -7,16 +7,16 @@ using Artect.Templating;
 namespace Artect.Generation.Emitters;
 
 /// <summary>
-/// Emits <c>&lt;Entity&gt;Model</c> records into <c>&lt;Project&gt;.Application.Models</c>.
-/// One record per entity with a PK; join-tables skipped. The Model is the Application-internal
+/// Emits <c>&lt;Entity&gt;Dto</c> records into <c>&lt;Project&gt;.Application.Dtos</c>.
+/// One record per entity with a PK; join-tables skipped. The Dto is the Application-internal
 /// representation — repositories project to it and interactors return it. Api layer (Phase D)
-/// maps Model→Response at the boundary.
+/// maps Dto→Response at the boundary.
 /// </summary>
-public sealed class EntityModelEmitter : IEmitter
+public sealed class EntityDtoEmitter : IEmitter
 {
     public IReadOnlyList<EmittedFile> Emit(EmitterContext ctx)
     {
-        var template = TemplateParser.Parse(ctx.Templates.Load("EntityModel.cs.artect"));
+        var template = TemplateParser.Parse(ctx.Templates.Load("EntityDto.cs.artect"));
         var list = new List<EmittedFile>();
         var includeChildren = ctx.Config.IncludeChildCollectionsInResponses;
 
@@ -37,7 +37,7 @@ public sealed class EntityModelEmitter : IEmitter
 
             var data = new
             {
-                Namespace = CleanLayout.ApplicationModelsNamespace(ctx.Config.ProjectName),
+                Namespace = CleanLayout.ApplicationDtosNamespace(ctx.Config.ProjectName),
                 EntityName = entity.EntityTypeName,
                 Columns = entity.Table.Columns.Select(c => new
                 {
@@ -49,7 +49,7 @@ public sealed class EntityModelEmitter : IEmitter
                 ChildCollections = childCollections,
             };
             var rendered = Renderer.Render(template, data);
-            var path = CleanLayout.ApplicationModelsPath(ctx.Config.ProjectName, $"{entity.EntityTypeName}Model");
+            var path = CleanLayout.ApplicationDtosPath(ctx.Config.ProjectName, $"{entity.EntityTypeName}Dto");
             list.Add(new EmittedFile(path, rendered));
         }
         return list;

@@ -78,7 +78,7 @@ public sealed class ApplicationTestsEmitter : IEmitter
         var e = entity.EntityTypeName;
         var repoAbsNs = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
         var commandsNs = CleanLayout.ApplicationCommandsNamespace(project);
-        var modelsNs = CleanLayout.ApplicationModelsNamespace(project);
+        var modelsNs = CleanLayout.ApplicationDtosNamespace(project);
         var useCasesNs = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
         var commonNs = CleanLayout.ApplicationCommonNamespace(project);
         var entityNs = $"{CleanLayout.DomainNamespace(project)}.Entities";
@@ -108,11 +108,11 @@ public sealed class ApplicationTestsEmitter : IEmitter
         sb.AppendLine("    {");
         sb.AppendLine($"        var {repoParam} = Substitute.For<{writeRepo}>();");
         sb.AppendLine($"        {repoParam}.CreateAsync(Arg.Any<{e}>(), Arg.Any<CancellationToken>())");
-        sb.AppendLine($"             .Returns(new {e}Model {{ {BuildModelInit(entity, corrections)} }});");
+        sb.AppendLine($"             .Returns(new {e}Dto {{ {BuildModelInit(entity, corrections)} }});");
         sb.AppendLine($"        var sut = new Create{e}UseCase({repoParam});");
         sb.AppendLine($"        var command = new Create{e}Command {{ {BuildValidArgs(entity, corrections)} }};");
         sb.AppendLine($"        var result = await sut.ExecuteAsync(command, default);");
-        sb.AppendLine($"        result.Should().BeOfType<UseCaseResult<{e}Model>.Success>();");
+        sb.AppendLine($"        result.Should().BeOfType<UseCaseResult<{e}Dto>.Success>();");
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
@@ -124,7 +124,7 @@ public sealed class ApplicationTestsEmitter : IEmitter
         var e = entity.EntityTypeName;
         var repoAbsNs = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
         var queriesNs = CleanLayout.ApplicationQueriesNamespace(project);
-        var modelsNs = CleanLayout.ApplicationModelsNamespace(project);
+        var modelsNs = CleanLayout.ApplicationDtosNamespace(project);
         var useCasesNs = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
         var commonNs = CleanLayout.ApplicationCommonNamespace(project);
 
@@ -161,11 +161,11 @@ public sealed class ApplicationTestsEmitter : IEmitter
         sb.AppendLine("    {");
         sb.AppendLine($"        var {repoParam} = Substitute.For<{readRepo}>();");
         sb.AppendLine($"        {repoParam}.GetByIdAsync(Arg.Any<{pkType}>(), Arg.Any<CancellationToken>())");
-        sb.AppendLine($"             .Returns(new {e}Model {{ {BuildModelInit(entity, corrections)} }});");
+        sb.AppendLine($"             .Returns(new {e}Dto {{ {BuildModelInit(entity, corrections)} }});");
         sb.AppendLine($"        var sut = new Get{e}ByIdUseCase({repoParam});");
         sb.AppendLine($"        var query = new Get{e}ByIdQuery {{ {pkProp} = {pkValidLiteral} }};");
         sb.AppendLine($"        var result = await sut.ExecuteAsync(query, default);");
-        sb.AppendLine($"        result.Should().BeOfType<UseCaseResult<{e}Model>.Success>();");
+        sb.AppendLine($"        result.Should().BeOfType<UseCaseResult<{e}Dto>.Success>();");
         sb.AppendLine("    }");
         sb.AppendLine();
 
@@ -175,11 +175,11 @@ public sealed class ApplicationTestsEmitter : IEmitter
         sb.AppendLine("    {");
         sb.AppendLine($"        var {repoParam} = Substitute.For<{readRepo}>();");
         sb.AppendLine($"        {repoParam}.GetByIdAsync(Arg.Any<{pkType}>(), Arg.Any<CancellationToken>())");
-        sb.AppendLine($"             .Returns(({e}Model?)null);");
+        sb.AppendLine($"             .Returns(({e}Dto?)null);");
         sb.AppendLine($"        var sut = new Get{e}ByIdUseCase({repoParam});");
         sb.AppendLine($"        var query = new Get{e}ByIdQuery {{ {pkProp} = {pkValidLiteral} }};");
         sb.AppendLine($"        var result = await sut.ExecuteAsync(query, default);");
-        sb.AppendLine($"        result.Should().BeOfType<UseCaseResult<{e}Model>.NotFound>();");
+        sb.AppendLine($"        result.Should().BeOfType<UseCaseResult<{e}Dto>.NotFound>();");
         sb.AppendLine("    }");
 
         sb.AppendLine("}");
@@ -192,7 +192,7 @@ public sealed class ApplicationTestsEmitter : IEmitter
         var e = entity.EntityTypeName;
         var repoAbsNs = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
         var commandsNs = CleanLayout.ApplicationCommandsNamespace(project);
-        var modelsNs = CleanLayout.ApplicationModelsNamespace(project);
+        var modelsNs = CleanLayout.ApplicationDtosNamespace(project);
         var useCasesNs = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
         var commonNs = CleanLayout.ApplicationCommonNamespace(project);
 
@@ -229,7 +229,7 @@ public sealed class ApplicationTestsEmitter : IEmitter
         sb.AppendLine("    {");
         sb.AppendLine($"        var {repoParam} = Substitute.For<{repo}>();");
         sb.AppendLine($"        {repoParam}.GetByIdAsync(Arg.Any<{pkType}>(), Arg.Any<CancellationToken>())");
-        sb.AppendLine($"             .Returns(new {e}Model {{ {BuildModelInit(entity, corrections)} }});");
+        sb.AppendLine($"             .Returns(new {e}Dto {{ {BuildModelInit(entity, corrections)} }});");
         sb.AppendLine($"        var sut = new Update{e}UseCase({repoParam});");
         sb.AppendLine($"        var command = new Update{e}Command {{ {BuildValidArgs(entity, corrections)} }};");
         sb.AppendLine($"        var result = await sut.ExecuteAsync(command, default);");
@@ -243,7 +243,7 @@ public sealed class ApplicationTestsEmitter : IEmitter
         sb.AppendLine("    {");
         sb.AppendLine($"        var {repoParam} = Substitute.For<{repo}>();");
         sb.AppendLine($"        {repoParam}.GetByIdAsync(Arg.Any<{pkType}>(), Arg.Any<CancellationToken>())");
-        sb.AppendLine($"             .Returns(({e}Model?)null);");
+        sb.AppendLine($"             .Returns(({e}Dto?)null);");
         sb.AppendLine($"        var sut = new Update{e}UseCase({repoParam});");
         sb.AppendLine($"        var command = new Update{e}Command {{ {BuildValidArgs(entity, corrections)} }};");
         sb.AppendLine($"        var result = await sut.ExecuteAsync(command, default);");
@@ -260,7 +260,7 @@ public sealed class ApplicationTestsEmitter : IEmitter
         var e = entity.EntityTypeName;
         var repoAbsNs = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
         var commandsNs = CleanLayout.ApplicationCommandsNamespace(project);
-        var modelsNs = CleanLayout.ApplicationModelsNamespace(project);
+        var modelsNs = CleanLayout.ApplicationDtosNamespace(project);
         var useCasesNs = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
         var commonNs = CleanLayout.ApplicationCommonNamespace(project);
 
@@ -297,7 +297,7 @@ public sealed class ApplicationTestsEmitter : IEmitter
         sb.AppendLine("    {");
         sb.AppendLine($"        var {repoParam} = Substitute.For<{repo}>();");
         sb.AppendLine($"        {repoParam}.GetByIdAsync(Arg.Any<{pkType}>(), Arg.Any<CancellationToken>())");
-        sb.AppendLine($"             .Returns(new {e}Model {{ {BuildModelInit(entity, corrections)} }});");
+        sb.AppendLine($"             .Returns(new {e}Dto {{ {BuildModelInit(entity, corrections)} }});");
         sb.AppendLine($"        var sut = new Delete{e}UseCase({repoParam});");
         sb.AppendLine($"        var command = new Delete{e}Command {{ {pkProp} = {pkValidLiteral} }};");
         sb.AppendLine($"        var result = await sut.ExecuteAsync(command, default);");
@@ -311,7 +311,7 @@ public sealed class ApplicationTestsEmitter : IEmitter
         sb.AppendLine("    {");
         sb.AppendLine($"        var {repoParam} = Substitute.For<{repo}>();");
         sb.AppendLine($"        {repoParam}.GetByIdAsync(Arg.Any<{pkType}>(), Arg.Any<CancellationToken>())");
-        sb.AppendLine($"             .Returns(({e}Model?)null);");
+        sb.AppendLine($"             .Returns(({e}Dto?)null);");
         sb.AppendLine($"        var sut = new Delete{e}UseCase({repoParam});");
         sb.AppendLine($"        var command = new Delete{e}Command {{ {pkProp} = {pkValidLiteral} }};");
         sb.AppendLine($"        var result = await sut.ExecuteAsync(command, default);");

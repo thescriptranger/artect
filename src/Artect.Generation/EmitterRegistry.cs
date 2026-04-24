@@ -25,7 +25,7 @@ public static class EmitterRegistry
         new EntityBehaviorEmitter(),
         new EntityCommandEmitter(),
         new EntityEmitter(),
-        new EntityModelEmitter(),
+        new EntityDtoEmitter(),
         new EntityQueryEmitter(),
         new EnumEmitter(),
         new InfrastructureTestsEmitter(),

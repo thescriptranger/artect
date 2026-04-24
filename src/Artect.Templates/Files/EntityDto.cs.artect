@@ -1,6 +1,6 @@
 namespace {{ Namespace }};
 
-public sealed record {{ EntityName }}Model
+public sealed record {{ EntityName }}Dto
 {
 {{# for col in Columns }}
     public {{ col.ClrTypeWithNullability }} {{ col.PropertyName }} { get; init; }{{ col.Initializer }}
@@ -8,7 +8,7 @@ public sealed record {{ EntityName }}Model
 {{# if HasChildCollections }}
 
 {{# for child in ChildCollections }}
-    public System.Collections.Generic.IReadOnlyList<{{ child.TypeName }}Model> {{ child.PropertyName }} { get; init; } = System.Array.Empty<{{ child.TypeName }}Model>();
+    public System.Collections.Generic.IReadOnlyList<{{ child.TypeName }}Dto> {{ child.PropertyName }} { get; init; } = System.Array.Empty<{{ child.TypeName }}Dto>();
 {{/for}}
 {{/if}}
 }

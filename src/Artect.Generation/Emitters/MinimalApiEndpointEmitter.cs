@@ -83,7 +83,7 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         var respNs     = CleanLayout.SharedResponsesNamespace(project);
         var mapNs      = CleanLayout.ApiMappingNamespace(project);
         var commonNs   = CleanLayout.ApplicationCommonNamespace(project);
-        var modelsNs   = CleanLayout.ApplicationModelsNamespace(project);
+        var modelsNs   = CleanLayout.ApplicationDtosNamespace(project);
         var commandsNs = CleanLayout.ApplicationCommandsNamespace(project);
         var queriesNs  = CleanLayout.ApplicationQueriesNamespace(project);
         var ucNs       = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
@@ -130,8 +130,8 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
 
         if ((crud & CrudOperation.GetList) != 0)
         {
-            // List: PagedResult<EntityModel> → PagedResponse<EntityResponse>
-            sb.AppendLine($"        group.MapGet(\"/\", async (IUseCase<List{plural}Query, UseCaseResult<PagedResult<{entityName}Model>>> useCase, int? page, int? pageSize, System.Threading.CancellationToken ct) =>");
+            // List: PagedResult<EntityDto> → PagedResponse<EntityResponse>
+            sb.AppendLine($"        group.MapGet(\"/\", async (IUseCase<List{plural}Query, UseCaseResult<PagedResult<{entityName}Dto>>> useCase, int? page, int? pageSize, System.Threading.CancellationToken ct) =>");
             sb.AppendLine($"            (await useCase.ExecuteAsync({entityName}ApiMappers.ToListQuery(page ?? 1, pageSize ?? 50), ct)).ToIResult(m => new PagedResponse<{entityName}Response>");
             sb.AppendLine("            {");
             sb.AppendLine("                Items = m.Items.Select(x => x.ToResponse()).ToArray(),");
@@ -144,14 +144,14 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
 
         if ((crud & CrudOperation.GetById) != 0)
         {
-            sb.AppendLine($"        group.MapGet(\"{pkRouteSegments}\", async ({pkRouteParams}, IUseCase<Get{entityName}ByIdQuery, UseCaseResult<{entityName}Model>> useCase, System.Threading.CancellationToken ct) =>");
+            sb.AppendLine($"        group.MapGet(\"{pkRouteSegments}\", async ({pkRouteParams}, IUseCase<Get{entityName}ByIdQuery, UseCaseResult<{entityName}Dto>> useCase, System.Threading.CancellationToken ct) =>");
             sb.AppendLine($"            (await useCase.ExecuteAsync({entityName}ApiMappers.ToGetByIdQuery({BuildPkArgNames(entity, corrections)}), ct)).ToIResult(m => m.ToResponse()));");
             sb.AppendLine();
         }
 
         if ((crud & CrudOperation.Post) != 0)
         {
-            sb.AppendLine($"        group.MapPost(\"/\", async (Create{entityName}Request request, IUseCase<Create{entityName}Command, UseCaseResult<{entityName}Model>> useCase, System.Threading.CancellationToken ct) =>");
+            sb.AppendLine($"        group.MapPost(\"/\", async (Create{entityName}Request request, IUseCase<Create{entityName}Command, UseCaseResult<{entityName}Dto>> useCase, System.Threading.CancellationToken ct) =>");
             sb.AppendLine($"            (await useCase.ExecuteAsync(request.ToCommand(), ct)).ToIResult(m => m.ToResponse()));");
             sb.AppendLine();
         }
@@ -190,7 +190,7 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         var respNs     = CleanLayout.SharedResponsesNamespace(project);
         var mapNs      = CleanLayout.ApiMappingNamespace(project);
         var commonNs   = CleanLayout.ApplicationCommonNamespace(project);
-        var modelsNs   = CleanLayout.ApplicationModelsNamespace(project);
+        var modelsNs   = CleanLayout.ApplicationDtosNamespace(project);
         var queriesNs  = CleanLayout.ApplicationQueriesNamespace(project);
         var ucNs       = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
 
@@ -215,7 +215,7 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         sb.AppendLine("    {");
         sb.AppendLine($"        var group = app.MapGroup(\"{BuildRoutePrefix(ctx.Config.ApiVersioning, route)}\");");
         sb.AppendLine();
-        sb.AppendLine($"        group.MapGet(\"/\", async (IUseCase<List{plural}Query, UseCaseResult<PagedResult<{entityName}Model>>> useCase, int? page, int? pageSize, System.Threading.CancellationToken ct) =>");
+        sb.AppendLine($"        group.MapGet(\"/\", async (IUseCase<List{plural}Query, UseCaseResult<PagedResult<{entityName}Dto>>> useCase, int? page, int? pageSize, System.Threading.CancellationToken ct) =>");
         sb.AppendLine($"            (await useCase.ExecuteAsync(new List{plural}Query(page ?? 1, pageSize ?? 50), ct)).ToIResult(m => new PagedResponse<{entityName}Response>");
         sb.AppendLine("            {");
         sb.AppendLine("                Items = m.Items.Select(x => x.ToResponse()).ToArray(),");

@@ -53,11 +53,11 @@ public sealed class EntityQueryEmitter : IEmitter
         {
             Namespace = CleanLayout.ApplicationQueriesNamespace(ctx.Config.ProjectName),
             CommonNamespace = CleanLayout.ApplicationCommonNamespace(ctx.Config.ProjectName),
-            ModelsNamespace = CleanLayout.ApplicationModelsNamespace(ctx.Config.ProjectName),
+            ModelsNamespace = CleanLayout.ApplicationDtosNamespace(ctx.Config.ProjectName),
             HasModelsUsing = true,
             QueryName = queryName,
             PkArgList = argList,
-            PayloadType = $"{entity.EntityTypeName}Model",
+            PayloadType = $"{entity.EntityTypeName}Dto",
         };
         return new EmittedFile(
             CleanLayout.ApplicationQueriesPath(ctx.Config.ProjectName, queryName),
@@ -71,11 +71,11 @@ public sealed class EntityQueryEmitter : IEmitter
         {
             Namespace = CleanLayout.ApplicationQueriesNamespace(ctx.Config.ProjectName),
             CommonNamespace = CleanLayout.ApplicationCommonNamespace(ctx.Config.ProjectName),
-            ModelsNamespace = CleanLayout.ApplicationModelsNamespace(ctx.Config.ProjectName),
+            ModelsNamespace = CleanLayout.ApplicationDtosNamespace(ctx.Config.ProjectName),
             HasModelsUsing = true,
             QueryName = queryName,
             PkArgList = "(int Page, int PageSize)",
-            PayloadType = $"PagedResult<{entityTypeName}Model>",
+            PayloadType = $"PagedResult<{entityTypeName}Dto>",
         };
         return new EmittedFile(
             CleanLayout.ApplicationQueriesPath(ctx.Config.ProjectName, queryName),

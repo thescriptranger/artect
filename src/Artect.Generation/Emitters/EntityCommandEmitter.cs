@@ -30,7 +30,7 @@ public sealed class EntityCommandEmitter : IEmitter
             var nonServerGenColumns = entity.Table.Columns.Where(c => !c.IsServerGenerated).ToList();
 
             if (ctx.Config.Crud.HasFlag(CrudOperation.Post))
-                list.Add(Build(ctx, template, entity, "Create", nonServerGenColumns, payload: $"{entity.EntityTypeName}Model"));
+                list.Add(Build(ctx, template, entity, "Create", nonServerGenColumns, payload: $"{entity.EntityTypeName}Dto"));
 
             if (ctx.Config.Crud.HasFlag(CrudOperation.Put))
                 list.Add(Build(ctx, template, entity, "Update", entity.Table.Columns.ToList(), payload: "Unit"));
@@ -51,7 +51,7 @@ public sealed class EntityCommandEmitter : IEmitter
         {
             Namespace = CleanLayout.ApplicationCommandsNamespace(ctx.Config.ProjectName),
             CommonNamespace = CleanLayout.ApplicationCommonNamespace(ctx.Config.ProjectName),
-            ModelsNamespace = CleanLayout.ApplicationModelsNamespace(ctx.Config.ProjectName),
+            ModelsNamespace = CleanLayout.ApplicationDtosNamespace(ctx.Config.ProjectName),
             CommandName = commandName,
             PayloadType = payload,
             Properties = columns.Select(c => new
