@@ -74,7 +74,7 @@ public sealed class RepoHygieneEmitter : IEmitter
 
         - **Domain** — entity behavior lives in `<Entity>.Behavior.cs` hook files alongside the generated entity. Add custom methods there; the scaffold will never overwrite them.
         - **Application** — every use-case implements `IUseCase<TRequest, UseCaseResult<TPayload>>`. Requests flow through a pipeline decorator chain: `ValidationBehavior` → `LoggingBehavior` → `TransactionBehavior` → the interactor.
-        - **Infrastructure** — repositories are split by intent when `splitRepositoriesByIntent: true` (`I<Entity>ReadRepository` / `I<Entity>WriteRepository`).
+        - **Infrastructure** — one repository interface per entity (`I<Entity>Repository`) covers all persistence operations.
         - **Shared** — wire contracts only; never referenced by Application or Domain.
 
         ## `artect.yaml` reference
@@ -84,7 +84,6 @@ public sealed class RepoHygieneEmitter : IEmitter
         | Key | Notes |
         |-----|-------|
         | `crud:` | List of `GetList`, `GetById`, `Post`, `Put`, `Patch`, `Delete` |
-        | `splitRepositoriesByIntent:` | Separate read/write repository interfaces |
         | `includeTestsProject:` | Emit xUnit test projects |
         | `namingCorrections:` | Map of schema identifiers to corrected Pascal-case names (e.g. `id: ID`) |
 

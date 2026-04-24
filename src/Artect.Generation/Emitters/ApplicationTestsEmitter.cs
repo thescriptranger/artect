@@ -61,20 +61,19 @@ public sealed class ApplicationTestsEmitter : IEmitter
 
     static IEnumerable<EmittedFile> BuildUseCaseTests(EmitterContext ctx, string testsDir, NamedEntity entity)
     {
-        var split = false;
         var corrections = ctx.NamingCorrections;
 
         if (ctx.Config.Crud.HasFlag(CrudOperation.Post))
-            yield return BuildCreateTest(ctx.Config.ProjectName, testsDir, entity, split, corrections);
+            yield return BuildCreateTest(ctx.Config.ProjectName, testsDir, entity, corrections);
         if (ctx.Config.Crud.HasFlag(CrudOperation.GetById))
-            yield return BuildGetByIdTest(ctx.Config.ProjectName, testsDir, entity, split, corrections);
+            yield return BuildGetByIdTest(ctx.Config.ProjectName, testsDir, entity, corrections);
         if (ctx.Config.Crud.HasFlag(CrudOperation.Put))
-            yield return BuildUpdateTest(ctx.Config.ProjectName, testsDir, entity, split, corrections);
+            yield return BuildUpdateTest(ctx.Config.ProjectName, testsDir, entity, corrections);
         if (ctx.Config.Crud.HasFlag(CrudOperation.Delete))
-            yield return BuildDeleteTest(ctx.Config.ProjectName, testsDir, entity, split, corrections);
+            yield return BuildDeleteTest(ctx.Config.ProjectName, testsDir, entity, corrections);
     }
 
-    static EmittedFile BuildCreateTest(string project, string testsDir, NamedEntity entity, bool split, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
+    static EmittedFile BuildCreateTest(string project, string testsDir, NamedEntity entity, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var e = entity.EntityTypeName;
         var repoAbsNs = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
@@ -84,8 +83,8 @@ public sealed class ApplicationTestsEmitter : IEmitter
         var commonNs = CleanLayout.ApplicationCommonNamespace(project);
         var entityNs = $"{CleanLayout.DomainNamespace(project)}.Entities";
 
-        var writeRepo = split ? $"I{e}WriteRepository" : $"I{e}Repository";
-        var repoParam = split ? "write" : "repo";
+        var writeRepo = $"I{e}Repository";
+        var repoParam = "repo";
 
         var sb = new StringBuilder();
         sb.AppendLine("using FluentAssertions;");
@@ -120,7 +119,7 @@ public sealed class ApplicationTestsEmitter : IEmitter
         return new EmittedFile($"{testsDir}/UseCases/Create{e}UseCaseTests.cs", sb.ToString());
     }
 
-    static EmittedFile BuildGetByIdTest(string project, string testsDir, NamedEntity entity, bool split, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
+    static EmittedFile BuildGetByIdTest(string project, string testsDir, NamedEntity entity, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var e = entity.EntityTypeName;
         var repoAbsNs = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
@@ -129,8 +128,8 @@ public sealed class ApplicationTestsEmitter : IEmitter
         var useCasesNs = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
         var commonNs = CleanLayout.ApplicationCommonNamespace(project);
 
-        var readRepo = split ? $"I{e}ReadRepository" : $"I{e}Repository";
-        var repoParam = split ? "read" : "repo";
+        var readRepo = $"I{e}Repository";
+        var repoParam = "repo";
 
         var pk = entity.Table.PrimaryKey!;
         var pkNames = pk.ColumnNames.ToHashSet(System.StringComparer.OrdinalIgnoreCase);
@@ -188,7 +187,7 @@ public sealed class ApplicationTestsEmitter : IEmitter
         return new EmittedFile($"{testsDir}/UseCases/Get{e}ByIdUseCaseTests.cs", sb.ToString());
     }
 
-    static EmittedFile BuildUpdateTest(string project, string testsDir, NamedEntity entity, bool split, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
+    static EmittedFile BuildUpdateTest(string project, string testsDir, NamedEntity entity, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var e = entity.EntityTypeName;
         var repoAbsNs = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
@@ -197,10 +196,8 @@ public sealed class ApplicationTestsEmitter : IEmitter
         var useCasesNs = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
         var commonNs = CleanLayout.ApplicationCommonNamespace(project);
 
-        var readRepo = split ? $"I{e}ReadRepository" : $"I{e}Repository";
-        var writeRepo = split ? $"I{e}WriteRepository" : $"I{e}Repository";
-        var readParam = split ? "read" : "repo";
-        var writeParam = split ? "write" : "repo";
+        var repo = $"I{e}Repository";
+        var repoParam = "repo";
 
         var pk = entity.Table.PrimaryKey!;
         var pkNames = pk.ColumnNames.ToHashSet(System.StringComparer.OrdinalIgnoreCase);
@@ -230,21 +227,10 @@ public sealed class ApplicationTestsEmitter : IEmitter
         sb.AppendLine("    [Fact]");
         sb.AppendLine("    public async Task Returns_Success_when_entity_exists()");
         sb.AppendLine("    {");
-        if (split)
-        {
-            sb.AppendLine($"        var {readParam} = Substitute.For<{readRepo}>();");
-            sb.AppendLine($"        var {writeParam} = Substitute.For<{writeRepo}>();");
-            sb.AppendLine($"        {readParam}.GetByIdAsync(Arg.Any<{pkType}>(), Arg.Any<CancellationToken>())");
-            sb.AppendLine($"             .Returns(new {e}Model {{ {BuildModelInit(entity, corrections)} }});");
-            sb.AppendLine($"        var sut = new Update{e}UseCase({readParam}, {writeParam});");
-        }
-        else
-        {
-            sb.AppendLine($"        var {readParam} = Substitute.For<{readRepo}>();");
-            sb.AppendLine($"        {readParam}.GetByIdAsync(Arg.Any<{pkType}>(), Arg.Any<CancellationToken>())");
-            sb.AppendLine($"             .Returns(new {e}Model {{ {BuildModelInit(entity, corrections)} }});");
-            sb.AppendLine($"        var sut = new Update{e}UseCase({readParam});");
-        }
+        sb.AppendLine($"        var {repoParam} = Substitute.For<{repo}>();");
+        sb.AppendLine($"        {repoParam}.GetByIdAsync(Arg.Any<{pkType}>(), Arg.Any<CancellationToken>())");
+        sb.AppendLine($"             .Returns(new {e}Model {{ {BuildModelInit(entity, corrections)} }});");
+        sb.AppendLine($"        var sut = new Update{e}UseCase({repoParam});");
         sb.AppendLine($"        var command = new Update{e}Command {{ {BuildValidArgs(entity, corrections)} }};");
         sb.AppendLine($"        var result = await sut.ExecuteAsync(command, default);");
         sb.AppendLine($"        result.Should().BeOfType<UseCaseResult<Unit>.Success>();");
@@ -255,21 +241,10 @@ public sealed class ApplicationTestsEmitter : IEmitter
         sb.AppendLine("    [Fact]");
         sb.AppendLine("    public async Task Returns_NotFound_when_entity_missing()");
         sb.AppendLine("    {");
-        if (split)
-        {
-            sb.AppendLine($"        var {readParam} = Substitute.For<{readRepo}>();");
-            sb.AppendLine($"        var {writeParam} = Substitute.For<{writeRepo}>();");
-            sb.AppendLine($"        {readParam}.GetByIdAsync(Arg.Any<{pkType}>(), Arg.Any<CancellationToken>())");
-            sb.AppendLine($"             .Returns(({e}Model?)null);");
-            sb.AppendLine($"        var sut = new Update{e}UseCase({readParam}, {writeParam});");
-        }
-        else
-        {
-            sb.AppendLine($"        var {readParam} = Substitute.For<{readRepo}>();");
-            sb.AppendLine($"        {readParam}.GetByIdAsync(Arg.Any<{pkType}>(), Arg.Any<CancellationToken>())");
-            sb.AppendLine($"             .Returns(({e}Model?)null);");
-            sb.AppendLine($"        var sut = new Update{e}UseCase({readParam});");
-        }
+        sb.AppendLine($"        var {repoParam} = Substitute.For<{repo}>();");
+        sb.AppendLine($"        {repoParam}.GetByIdAsync(Arg.Any<{pkType}>(), Arg.Any<CancellationToken>())");
+        sb.AppendLine($"             .Returns(({e}Model?)null);");
+        sb.AppendLine($"        var sut = new Update{e}UseCase({repoParam});");
         sb.AppendLine($"        var command = new Update{e}Command {{ {BuildValidArgs(entity, corrections)} }};");
         sb.AppendLine($"        var result = await sut.ExecuteAsync(command, default);");
         sb.AppendLine($"        result.Should().BeOfType<UseCaseResult<Unit>.NotFound>();");
@@ -280,7 +255,7 @@ public sealed class ApplicationTestsEmitter : IEmitter
         return new EmittedFile($"{testsDir}/UseCases/Update{e}UseCaseTests.cs", sb.ToString());
     }
 
-    static EmittedFile BuildDeleteTest(string project, string testsDir, NamedEntity entity, bool split, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
+    static EmittedFile BuildDeleteTest(string project, string testsDir, NamedEntity entity, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var e = entity.EntityTypeName;
         var repoAbsNs = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
@@ -289,10 +264,8 @@ public sealed class ApplicationTestsEmitter : IEmitter
         var useCasesNs = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
         var commonNs = CleanLayout.ApplicationCommonNamespace(project);
 
-        var readRepo = split ? $"I{e}ReadRepository" : $"I{e}Repository";
-        var writeRepo = split ? $"I{e}WriteRepository" : $"I{e}Repository";
-        var readParam = split ? "read" : "repo";
-        var writeParam = split ? "write" : "repo";
+        var repo = $"I{e}Repository";
+        var repoParam = "repo";
 
         var pk = entity.Table.PrimaryKey!;
         var pkNames = pk.ColumnNames.ToHashSet(System.StringComparer.OrdinalIgnoreCase);
@@ -322,21 +295,10 @@ public sealed class ApplicationTestsEmitter : IEmitter
         sb.AppendLine("    [Fact]");
         sb.AppendLine("    public async Task Returns_Success_when_entity_exists()");
         sb.AppendLine("    {");
-        if (split)
-        {
-            sb.AppendLine($"        var {readParam} = Substitute.For<{readRepo}>();");
-            sb.AppendLine($"        var {writeParam} = Substitute.For<{writeRepo}>();");
-            sb.AppendLine($"        {readParam}.GetByIdAsync(Arg.Any<{pkType}>(), Arg.Any<CancellationToken>())");
-            sb.AppendLine($"             .Returns(new {e}Model {{ {BuildModelInit(entity, corrections)} }});");
-            sb.AppendLine($"        var sut = new Delete{e}UseCase({readParam}, {writeParam});");
-        }
-        else
-        {
-            sb.AppendLine($"        var {readParam} = Substitute.For<{readRepo}>();");
-            sb.AppendLine($"        {readParam}.GetByIdAsync(Arg.Any<{pkType}>(), Arg.Any<CancellationToken>())");
-            sb.AppendLine($"             .Returns(new {e}Model {{ {BuildModelInit(entity, corrections)} }});");
-            sb.AppendLine($"        var sut = new Delete{e}UseCase({readParam});");
-        }
+        sb.AppendLine($"        var {repoParam} = Substitute.For<{repo}>();");
+        sb.AppendLine($"        {repoParam}.GetByIdAsync(Arg.Any<{pkType}>(), Arg.Any<CancellationToken>())");
+        sb.AppendLine($"             .Returns(new {e}Model {{ {BuildModelInit(entity, corrections)} }});");
+        sb.AppendLine($"        var sut = new Delete{e}UseCase({repoParam});");
         sb.AppendLine($"        var command = new Delete{e}Command {{ {pkProp} = {pkValidLiteral} }};");
         sb.AppendLine($"        var result = await sut.ExecuteAsync(command, default);");
         sb.AppendLine($"        result.Should().BeOfType<UseCaseResult<Unit>.Success>();");
@@ -347,21 +309,10 @@ public sealed class ApplicationTestsEmitter : IEmitter
         sb.AppendLine("    [Fact]");
         sb.AppendLine("    public async Task Returns_NotFound_when_entity_missing()");
         sb.AppendLine("    {");
-        if (split)
-        {
-            sb.AppendLine($"        var {readParam} = Substitute.For<{readRepo}>();");
-            sb.AppendLine($"        var {writeParam} = Substitute.For<{writeRepo}>();");
-            sb.AppendLine($"        {readParam}.GetByIdAsync(Arg.Any<{pkType}>(), Arg.Any<CancellationToken>())");
-            sb.AppendLine($"             .Returns(({e}Model?)null);");
-            sb.AppendLine($"        var sut = new Delete{e}UseCase({readParam}, {writeParam});");
-        }
-        else
-        {
-            sb.AppendLine($"        var {readParam} = Substitute.For<{readRepo}>();");
-            sb.AppendLine($"        {readParam}.GetByIdAsync(Arg.Any<{pkType}>(), Arg.Any<CancellationToken>())");
-            sb.AppendLine($"             .Returns(({e}Model?)null);");
-            sb.AppendLine($"        var sut = new Delete{e}UseCase({readParam});");
-        }
+        sb.AppendLine($"        var {repoParam} = Substitute.For<{repo}>();");
+        sb.AppendLine($"        {repoParam}.GetByIdAsync(Arg.Any<{pkType}>(), Arg.Any<CancellationToken>())");
+        sb.AppendLine($"             .Returns(({e}Model?)null);");
+        sb.AppendLine($"        var sut = new Delete{e}UseCase({repoParam});");
         sb.AppendLine($"        var command = new Delete{e}Command {{ {pkProp} = {pkValidLiteral} }};");
         sb.AppendLine($"        var result = await sut.ExecuteAsync(command, default);");
         sb.AppendLine($"        result.Should().BeOfType<UseCaseResult<Unit>.NotFound>();");

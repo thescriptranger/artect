@@ -66,111 +66,14 @@ public sealed class InfrastructureTestsEmitter : IEmitter
 
     static IEnumerable<EmittedFile> BuildEntityTests(EmitterContext ctx, string testsDir, NamedEntity entity)
     {
-        var split = false;
         var project = ctx.Config.ProjectName;
 
-        if (split)
-        {
-            yield return BuildReadRepositoryContract(project, testsDir, entity);
-            yield return BuildReadRepositoryTests(project, testsDir, entity);
-        }
-        else
-        {
-            yield return BuildMonolithicRepositoryContract(project, testsDir, entity);
-            yield return BuildMonolithicRepositoryTests(project, testsDir, entity);
-        }
-
+        yield return BuildMonolithicRepositoryContract(project, testsDir, entity);
+        yield return BuildMonolithicRepositoryTests(project, testsDir, entity);
         yield return BuildMappingTests(project, testsDir, entity, ctx.NamingCorrections);
     }
 
-    // ── Split: abstract contract for IEntityReadRepository ────────────────────
-
-    static EmittedFile BuildReadRepositoryContract(string project, string testsDir, NamedEntity entity)
-    {
-        var e = entity.EntityTypeName;
-        var repoAbsNs = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
-        var modelsNs = CleanLayout.ApplicationModelsNamespace(project);
-        var commonNs = CleanLayout.ApplicationCommonNamespace(project);
-
-        var pk = entity.Table.PrimaryKey!;
-        var pkNames = pk.ColumnNames.ToHashSet(System.StringComparer.OrdinalIgnoreCase);
-        var pkCol = entity.Table.Columns.First(c => pkNames.Contains(c.Name));
-        var pkType = SqlTypeMap.ToCs(pkCol.ClrType);
-        var pkDefaultLiteral = DefaultLiteralFor(pkCol.ClrType);
-
-        var sb = new StringBuilder();
-        sb.AppendLine("using System.Threading.Tasks;");
-        sb.AppendLine("using FluentAssertions;");
-        sb.AppendLine("using Xunit;");
-        sb.AppendLine($"using {repoAbsNs};");
-        sb.AppendLine($"using {modelsNs};");
-        sb.AppendLine($"using {commonNs};");
-        sb.AppendLine();
-        sb.AppendLine($"namespace {project}.Infrastructure.Tests.Contracts;");
-        sb.AppendLine();
-        sb.AppendLine($"/// <summary>");
-        sb.AppendLine($"/// Liskov Substitution: every implementation of I{e}ReadRepository must pass these tests.");
-        sb.AppendLine($"/// </summary>");
-        sb.AppendLine($"public abstract class {e}ReadRepositoryContract");
-        sb.AppendLine("{");
-        sb.AppendLine($"    protected abstract I{e}ReadRepository CreateSut();");
-        sb.AppendLine();
-        sb.AppendLine("    [Fact]");
-        sb.AppendLine($"    public async Task GetByIdAsync_returns_null_for_missing_id()");
-        sb.AppendLine("    {");
-        sb.AppendLine("        var sut = CreateSut();");
-        sb.AppendLine($"        var result = await sut.GetByIdAsync({pkDefaultLiteral}, default);");
-        sb.AppendLine("        result.Should().BeNull();");
-        sb.AppendLine("    }");
-        sb.AppendLine();
-        sb.AppendLine("    [Fact]");
-        sb.AppendLine($"    public async Task ListAsync_returns_empty_page_on_empty_store()");
-        sb.AppendLine("    {");
-        sb.AppendLine("        var sut = CreateSut();");
-        sb.AppendLine($"        var result = await sut.ListAsync(1, 10, default);");
-        sb.AppendLine("        result.Should().NotBeNull();");
-        sb.AppendLine("        result.Items.Should().BeEmpty();");
-        sb.AppendLine("        result.TotalCount.Should().Be(0);");
-        sb.AppendLine("    }");
-        sb.AppendLine("}");
-
-        return new EmittedFile($"{testsDir}/Contracts/{e}ReadRepositoryContract.cs", sb.ToString());
-    }
-
-    // ── Split: concrete EF tests inheriting the contract ─────────────────────
-
-    static EmittedFile BuildReadRepositoryTests(string project, string testsDir, NamedEntity entity)
-    {
-        var e = entity.EntityTypeName;
-        var dbCtx = $"{project}DbContext";
-        var infraDataNs = $"{CleanLayout.InfrastructureNamespace(project)}.Data";
-        var infraRepoNs = $"{CleanLayout.InfrastructureNamespace(project)}.Repositories";
-        var repoAbsNs = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
-
-        var sb = new StringBuilder();
-        sb.AppendLine("using Microsoft.EntityFrameworkCore;");
-        sb.AppendLine($"using {infraDataNs};");
-        sb.AppendLine($"using {infraRepoNs};");
-        sb.AppendLine($"using {repoAbsNs};");
-        sb.AppendLine($"using {project}.Infrastructure.Tests.Contracts;");
-        sb.AppendLine();
-        sb.AppendLine($"namespace {project}.Infrastructure.Tests.Repositories;");
-        sb.AppendLine();
-        sb.AppendLine($"public class Ef{e}ReadRepositoryTests : {e}ReadRepositoryContract");
-        sb.AppendLine("{");
-        sb.AppendLine($"    protected override I{e}ReadRepository CreateSut()");
-        sb.AppendLine("    {");
-        sb.AppendLine($"        var options = new DbContextOptionsBuilder<{dbCtx}>()");
-        sb.AppendLine($"            .UseInMemoryDatabase(\"Ef{e}ReadRepo-\" + System.Guid.NewGuid().ToString(\"N\"))");
-        sb.AppendLine("            .Options;");
-        sb.AppendLine($"        return new {e}ReadRepository(new {dbCtx}(options));");
-        sb.AppendLine("    }");
-        sb.AppendLine("}");
-
-        return new EmittedFile($"{testsDir}/Repositories/Ef{e}ReadRepositoryTests.cs", sb.ToString());
-    }
-
-    // ── Monolithic (SplitRepositoriesByIntent == false) ───────────────────────
+    // ── Monolithic repository ─────────────────────────────────────────────────
 
     static EmittedFile BuildMonolithicRepositoryContract(string project, string testsDir, NamedEntity entity)
     {
