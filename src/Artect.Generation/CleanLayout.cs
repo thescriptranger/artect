@@ -67,4 +67,22 @@ public static class CleanLayout
     public static string SharedErrorsNamespace(string root) => $"{root}.Shared.Errors";
     public static string ApiMapperPath(string root, string className) => $"{ApiDir(root)}/Mapping/{className}.cs";
     public static string ApiMappingNamespace(string root) => $"{root}.Api.Mapping";
+
+    // Phase D — Feature-layer helpers (IT Director GeneratedAPI layout)
+    public static string ApplicationFeaturePath(string root, string entityTypeName, string className) =>
+        $"{ApplicationDir(root)}/Features/{Pluralize(entityTypeName)}/{className}.cs";
+
+    public static string ApplicationFeatureNamespace(string root, string entityTypeName) =>
+        $"{root}.Application.Features.{Pluralize(entityTypeName)}";
+
+    public static string ApplicationFeatureAbstractionsPath(string root, string entityTypeName, string className) =>
+        $"{ApplicationDir(root)}/Features/{Pluralize(entityTypeName)}/Abstractions/{className}.cs";
+
+    public static string ApplicationFeatureAbstractionsNamespace(string root, string entityTypeName) =>
+        $"{root}.Application.Features.{Pluralize(entityTypeName)}.Abstractions";
+
+    static string Pluralize(string entityTypeName) =>
+        Artect.Naming.CasingHelper.ToPascalCase(
+            Artect.Naming.Pluralizer.Pluralize(entityTypeName),
+            corrections: null);
 }
