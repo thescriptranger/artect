@@ -7,10 +7,12 @@ public static class EmitterRegistry
 {
     public static IReadOnlyList<IEmitter> All() => new IEmitter[]
     {
+        new ApiDiEmitter(),
         new ApiProblemEmitter(),
         new ApiTestsEmitter(),
         new AppSettingsEmitter(),
         new ApplicationCommonEmitter(),
+        new ApplicationDiEmitter(),
         new ApplicationErrorMappersEmitter(),
         new ApplicationTestsEmitter(),
         new ArtectConfigEmitter(),
@@ -31,9 +33,11 @@ public static class EmitterRegistry
         new EntityDtoEmitter(),
         new EntityMappingsEmitter(),
         new EntityQueryEmitter(),
+        new EndpointRegistrationEmitter(),
         new EnumEmitter(),
         new FeatureCommandsInterfaceEmitter(),
         new FeatureQueriesInterfaceEmitter(),
+        new InfrastructureDiEmitter(),
         new InfrastructureTestsEmitter(),
         new LaunchSettingsEmitter(),
         new MigrationsEmitter(),
