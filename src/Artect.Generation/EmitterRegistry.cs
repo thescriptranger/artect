@@ -29,6 +29,7 @@ public static class EmitterRegistry
         new EntityCommandEmitter(),
         new EntityEmitter(),
         new EntityDtoEmitter(),
+        new EntityMappingsEmitter(),
         new EntityQueryEmitter(),
         new EnumEmitter(),
         new FeatureCommandsInterfaceEmitter(),

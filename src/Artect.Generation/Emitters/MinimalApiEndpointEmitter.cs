@@ -8,9 +8,10 @@ using Artect.Naming;
 namespace Artect.Generation.Emitters;
 
 /// <summary>
-/// Emits one <c>&lt;Plural&gt;Endpoints</c> static class per entity (and list-only for pk-less tables/views).
-/// Lambdas are thin one-liners: Request → Command/Query → Interactor → UseCaseResult → IResult.
-/// Mapping between wire types and application types is delegated to <c>&lt;Entity&gt;ApiMappers</c>.
+/// Emits one &lt;Plural&gt;Endpoints.cs per entity into Api/Endpoints/.
+/// Flat folder — no per-feature subfolder. Endpoints inject I&lt;Entity&gt;Queries /
+/// I&lt;Entity&gt;Commands directly, build Command records inline from Request fields,
+/// and return Results.* helpers. Validation is inline via IValidator&lt;Request&gt;.
 /// </summary>
 public sealed class MinimalApiEndpointEmitter : IEmitter
 {
@@ -18,246 +19,184 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
     {
         var list = new List<EmittedFile>();
         var project = ctx.Config.ProjectName;
-
         var corrections = ctx.NamingCorrections;
 
-        // ── regular entities (tables with PK) ─────────────────────────────
         foreach (var entity in ctx.Model.Entities)
         {
             if (entity.IsJoinTable) continue;
+            if (!entity.HasPrimaryKey) continue;
 
-            var plural = entity.DbSetPropertyName; // already pluralised PascalCase
-            var route = CasingHelper.ToKebabCase(plural, corrections);
-            string content;
-            if (entity.HasPrimaryKey)
-            {
-                content = BuildFullEndpoints(ctx, entity, plural, route);
-            }
-            else
-            {
-                content = BuildListOnlyEndpoints(ctx, entity.EntityTypeName, plural, route, project);
-            }
-
-            var path = CleanLayout.EndpointPath(project, plural);
-            list.Add(new EmittedFile(path, content));
-        }
-
-        // ── views (list-only) ──────────────────────────────────────────────
-        foreach (var view in ctx.Graph.Views)
-        {
-            var typeName = CasingHelper.ToPascalCase(Pluralizer.Singularize(view.Name), corrections);
-            var plural   = CasingHelper.ToPascalCase(Pluralizer.Pluralize(Pluralizer.Singularize(view.Name)), corrections);
-            var route    = CasingHelper.ToKebabCase(plural, corrections);
-            var content  = BuildListOnlyEndpoints(ctx, typeName, plural, route, project);
-            var path     = CleanLayout.EndpointPath(project, plural);
-            list.Add(new EmittedFile(path, content));
+            var pluralPascal = Artect.Naming.CasingHelper.ToPascalCase(
+                Artect.Naming.Pluralizer.Pluralize(entity.EntityTypeName), corrections);
+            var routeKebab = Artect.Naming.CasingHelper.ToKebabCase(pluralPascal, corrections);
+            list.Add(Build(ctx, entity, pluralPascal, routeKebab));
         }
 
         return list;
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    // Full CRUD endpoints (entity has PK)
-    // ──────────────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Builds the route prefix for a MapGroup call. When API versioning is UrlSegment, a
-    /// <c>v{version:apiVersion}</c> segment is inserted; otherwise the path has no version
-    /// placeholder (Header / QueryString versioning plumbs the version outside the URL, and
-    /// None means no versioning at all — so a stray <c>{version?}</c> would show up in the
-    /// OpenAPI spec and prompt consumers like Scalar for a value that means nothing).
-    /// </summary>
-    static string BuildRoutePrefix(ApiVersioningKind versioning, string route)
-        => versioning == ApiVersioningKind.UrlSegment
-            ? $"/api/v{{version:apiVersion}}/{route}"
-            : $"/api/{route}";
-
-    static string BuildFullEndpoints(EmitterContext ctx, NamedEntity entity, string plural, string route)
+    static EmittedFile Build(EmitterContext ctx, NamedEntity entity, string plural, string route)
     {
-        var project    = ctx.Config.ProjectName;
-        var crud       = ctx.Config.Crud;
-        var entityName = entity.EntityTypeName;
+        var project = ctx.Config.ProjectName;
+        var crud    = ctx.Config.Crud;
+        var name    = entity.EntityTypeName;
+        var corrections = ctx.NamingCorrections;
 
-        var endpointNs = $"{project}.Api.Endpoints";
+        var pk = entity.Table.PrimaryKey!;
+        var pkColName = pk.ColumnNames[0];
+        var pkCol = entity.Table.Columns.First(c =>
+            string.Equals(c.Name, pkColName, System.StringComparison.OrdinalIgnoreCase));
+        var pkProp = EntityNaming.PropertyName(pkCol, corrections);
+        var pkType = SqlTypeMap.ToCs(pkCol.ClrType);
+        var pkRouteConstraint = pkType switch
+        {
+            "int" or "long" => ":int",
+            "System.Guid"   => ":guid",
+            _               => string.Empty,
+        };
+
+        var nonServerGenCols = entity.Table.Columns.Where(c => !c.IsServerGenerated).ToList();
+        var allCols          = entity.Table.Columns.ToList();
+
+        var apiMapNs   = CleanLayout.ApiMappingsNamespace(project);
+        var dtosNs     = CleanLayout.ApplicationDtosNamespace(project);
+        var featureNs  = CleanLayout.ApplicationFeatureNamespace(project, name);
+        var absNs      = CleanLayout.ApplicationFeatureAbstractionsNamespace(project, name);
+        var appValidNs = CleanLayout.ApplicationValidatorsNamespace(project);
+        var apiValidNs = CleanLayout.ApiValidatorsNamespace(project);
         var reqNs      = CleanLayout.SharedRequestsNamespace(project);
         var respNs     = CleanLayout.SharedResponsesNamespace(project);
-        var mapNs      = CleanLayout.ApiMappingNamespace(project);
-        var commonNs   = CleanLayout.ApplicationCommonNamespace(project);
-        var modelsNs   = CleanLayout.ApplicationDtosNamespace(project);
-        var commandsNs = CleanLayout.ApplicationCommandsNamespace(project);
-        var queriesNs  = CleanLayout.ApplicationQueriesNamespace(project);
-        var ucNs       = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
-
-        // PK route segment(s)
-        var pk = entity.Table.PrimaryKey!;
-        var corrections = ctx.NamingCorrections;
-        var pkRouteParams = BuildPkRouteParams(entity, corrections);   // e.g. "int id" or "int id, Guid sub"
-        var pkRouteSegments = BuildPkRouteSegments(entity, corrections); // e.g. "/{id}" or "/{id}/{sub}"
-
-        var hasWrite = (crud & (CrudOperation.Post | CrudOperation.Put | CrudOperation.Patch)) != 0;
-        var hasQuery = (crud & (CrudOperation.GetList | CrudOperation.GetById)) != 0;
+        var endpointNs = $"{project}.Api.Endpoints";
 
         var sb = new StringBuilder();
-        sb.AppendLine("using System.Linq;");
+        sb.AppendLine($"using {apiMapNs};");
+        sb.AppendLine($"using {dtosNs};");
+        sb.AppendLine($"using {featureNs};");
+        sb.AppendLine($"using {absNs};");
+        sb.AppendLine($"using {appValidNs};");
+        sb.AppendLine($"using {apiValidNs};");
+        sb.AppendLine($"using {reqNs};");
+        sb.AppendLine($"using {respNs};");
         sb.AppendLine("using Microsoft.AspNetCore.Builder;");
         sb.AppendLine("using Microsoft.AspNetCore.Http;");
         sb.AppendLine("using Microsoft.AspNetCore.Routing;");
-        sb.AppendLine($"using {commonNs};");
-        sb.AppendLine($"using {modelsNs};");
-        if (hasWrite)
-        {
-            sb.AppendLine($"using {reqNs};");
-            sb.AppendLine($"using {commandsNs};");
-        }
-        else if ((crud & CrudOperation.Delete) != 0)
-        {
-            sb.AppendLine($"using {commandsNs};");
-        }
-        if (hasQuery)
-            sb.AppendLine($"using {queriesNs};");
-        sb.AppendLine($"using {respNs};");
-        sb.AppendLine($"using {mapNs};");
-        sb.AppendLine($"using {ucNs};");
         sb.AppendLine();
         sb.AppendLine($"namespace {endpointNs};");
         sb.AppendLine();
-        sb.AppendLine($"public static class {plural}Endpoints");
+        sb.AppendLine($"public static partial class {plural}Endpoints");
         sb.AppendLine("{");
         sb.AppendLine($"    public static IEndpointRouteBuilder Map{plural}Endpoints(this IEndpointRouteBuilder app)");
         sb.AppendLine("    {");
-        sb.AppendLine($"        var group = app.MapGroup(\"{BuildRoutePrefix(ctx.Config.ApiVersioning, route)}\");");
+        sb.AppendLine($"        var group = app.MapGroup(\"/api/{route}\");");
         sb.AppendLine();
 
         if ((crud & CrudOperation.GetList) != 0)
-        {
-            // List: PagedResult<EntityDto> → PagedResponse<EntityResponse>
-            sb.AppendLine($"        group.MapGet(\"/\", async (IUseCase<List{plural}Query, UseCaseResult<PagedResult<{entityName}Dto>>> useCase, int? page, int? pageSize, System.Threading.CancellationToken ct) =>");
-            sb.AppendLine($"            (await useCase.ExecuteAsync({entityName}ApiMappers.ToListQuery(page ?? 1, pageSize ?? 50), ct)).ToIResult(m => new PagedResponse<{entityName}Response>");
-            sb.AppendLine("            {");
-            sb.AppendLine("                Items = m.Items.Select(x => x.ToResponse()).ToArray(),");
-            sb.AppendLine("                Page = m.Page,");
-            sb.AppendLine("                PageSize = m.PageSize,");
-            sb.AppendLine("                TotalCount = m.TotalCount,");
-            sb.AppendLine("            }));");
-            sb.AppendLine();
-        }
-
+            EmitGetList(sb, name, plural);
         if ((crud & CrudOperation.GetById) != 0)
-        {
-            sb.AppendLine($"        group.MapGet(\"{pkRouteSegments}\", async ({pkRouteParams}, IUseCase<Get{entityName}ByIdQuery, UseCaseResult<{entityName}Dto>> useCase, System.Threading.CancellationToken ct) =>");
-            sb.AppendLine($"            (await useCase.ExecuteAsync({entityName}ApiMappers.ToGetByIdQuery({BuildPkArgNames(entity, corrections)}), ct)).ToIResult(m => m.ToResponse()));");
-            sb.AppendLine();
-        }
-
+            EmitGetById(sb, name, pkProp, pkType, pkRouteConstraint);
         if ((crud & CrudOperation.Post) != 0)
-        {
-            sb.AppendLine($"        group.MapPost(\"/\", async (Create{entityName}Request request, IUseCase<Create{entityName}Command, UseCaseResult<{entityName}Dto>> useCase, System.Threading.CancellationToken ct) =>");
-            sb.AppendLine($"            (await useCase.ExecuteAsync(request.ToCommand(), ct)).ToIResult(m => m.ToResponse()));");
-            sb.AppendLine();
-        }
-
+            EmitPost(sb, name, route, pkProp, nonServerGenCols, corrections);
         if ((crud & CrudOperation.Put) != 0)
-        {
-            sb.AppendLine($"        group.MapPut(\"{pkRouteSegments}\", async ({pkRouteParams}, Update{entityName}Request request, IUseCase<Update{entityName}Command, UseCaseResult<Unit>> useCase, System.Threading.CancellationToken ct) =>");
-            sb.AppendLine($"            (await useCase.ExecuteAsync(request.ToUpdateCommand({BuildPkArgNames(entity, corrections)}), ct)).ToIResult());");
-            sb.AppendLine();
-        }
-
+            EmitPut(sb, name, pkColName, pkProp, pkType, pkRouteConstraint, allCols, corrections, verb: "Put", commandPrefix: "Update");
         if ((crud & CrudOperation.Patch) != 0)
-        {
-            sb.AppendLine($"        group.MapPatch(\"{pkRouteSegments}\", async ({pkRouteParams}, Update{entityName}Request request, IUseCase<Patch{entityName}Command, UseCaseResult<Unit>> useCase, System.Threading.CancellationToken ct) =>");
-            sb.AppendLine($"            (await useCase.ExecuteAsync(request.ToPatchCommand({BuildPkArgNames(entity, corrections)}), ct)).ToIResult());");
-            sb.AppendLine();
-        }
-
+            EmitPut(sb, name, pkColName, pkProp, pkType, pkRouteConstraint, allCols, corrections, verb: "Patch", commandPrefix: "Patch");
         if ((crud & CrudOperation.Delete) != 0)
-        {
-            sb.AppendLine($"        group.MapDelete(\"{pkRouteSegments}\", async ({pkRouteParams}, IUseCase<Delete{entityName}Command, UseCaseResult<Unit>> useCase, System.Threading.CancellationToken ct) =>");
-            sb.AppendLine($"            (await useCase.ExecuteAsync({entityName}ApiMappers.ToDeleteCommand({BuildPkArgNames(entity, corrections)}), ct)).ToIResult());");
-            sb.AppendLine();
-        }
+            EmitDelete(sb, name, pkProp, pkType, pkRouteConstraint);
 
         sb.AppendLine("        return app;");
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
-        return sb.ToString();
+        var path = $"{CleanLayout.ApiDir(project)}/Endpoints/{plural}Endpoints.cs";
+        return new EmittedFile(path, sb.ToString());
     }
 
-    static string BuildListOnlyEndpoints(EmitterContext ctx, string entityName, string plural, string route, string project)
+    static void EmitGetList(StringBuilder sb, string name, string plural)
     {
-        var endpointNs = $"{project}.Api.Endpoints";
-        var respNs     = CleanLayout.SharedResponsesNamespace(project);
-        var mapNs      = CleanLayout.ApiMappingNamespace(project);
-        var commonNs   = CleanLayout.ApplicationCommonNamespace(project);
-        var modelsNs   = CleanLayout.ApplicationDtosNamespace(project);
-        var queriesNs  = CleanLayout.ApplicationQueriesNamespace(project);
-        var ucNs       = $"{CleanLayout.ApplicationNamespace(project)}.UseCases";
-
-        var sb = new StringBuilder();
-        sb.AppendLine("using System.Linq;");
-        sb.AppendLine("using Microsoft.AspNetCore.Builder;");
-        sb.AppendLine("using Microsoft.AspNetCore.Http;");
-        sb.AppendLine("using Microsoft.AspNetCore.Routing;");
-        sb.AppendLine($"using {commonNs};");
-        sb.AppendLine($"using {modelsNs};");
-        sb.AppendLine($"using {queriesNs};");
-        sb.AppendLine($"using {respNs};");
-        sb.AppendLine($"using {mapNs};");
-        sb.AppendLine($"using {ucNs};");
-        sb.AppendLine();
-        sb.AppendLine($"namespace {endpointNs};");
-        sb.AppendLine();
-        sb.AppendLine("// No primary key — list endpoint only.");
-        sb.AppendLine($"public static class {plural}Endpoints");
-        sb.AppendLine("{");
-        sb.AppendLine($"    public static IEndpointRouteBuilder Map{plural}Endpoints(this IEndpointRouteBuilder app)");
-        sb.AppendLine("    {");
-        sb.AppendLine($"        var group = app.MapGroup(\"{BuildRoutePrefix(ctx.Config.ApiVersioning, route)}\");");
-        sb.AppendLine();
-        sb.AppendLine($"        group.MapGet(\"/\", async (IUseCase<List{plural}Query, UseCaseResult<PagedResult<{entityName}Dto>>> useCase, int? page, int? pageSize, System.Threading.CancellationToken ct) =>");
-        sb.AppendLine($"            (await useCase.ExecuteAsync(new List{plural}Query(page ?? 1, pageSize ?? 50), ct)).ToIResult(m => new PagedResponse<{entityName}Response>");
+        sb.AppendLine($"        group.MapGet(\"/\", async (I{name}Queries queries, CancellationToken ct, int page = 1, int pageSize = 50) =>");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (page < 1) { page = 1; }");
+        sb.AppendLine("            if (pageSize < 1) { pageSize = 50; }");
+        sb.AppendLine("            var (items, totalCount) = await queries.GetPagedAsync(page, pageSize, ct).ConfigureAwait(false);");
+        sb.AppendLine($"            return Results.Ok(new PagedResponse<{name}Response>");
         sb.AppendLine("            {");
-        sb.AppendLine("                Items = m.Items.Select(x => x.ToResponse()).ToArray(),");
-        sb.AppendLine("                Page = m.Page,");
-        sb.AppendLine("                PageSize = m.PageSize,");
-        sb.AppendLine("                TotalCount = m.TotalCount,");
-        sb.AppendLine("            }));");
+        sb.AppendLine("                Items = items.Select(e => e.ToResponse()).ToList(),");
+        sb.AppendLine("                Page = page,");
+        sb.AppendLine("                PageSize = pageSize,");
+        sb.AppendLine("                TotalCount = totalCount,");
+        sb.AppendLine("            });");
+        sb.AppendLine("        });");
         sb.AppendLine();
-        sb.AppendLine("        return app;");
-        sb.AppendLine("    }");
-        sb.AppendLine("}");
-        return sb.ToString();
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    // PK helpers
-    // ──────────────────────────────────────────────────────────────────────
-
-    /// <summary>Route segments for PK columns, e.g. "/{id}" or "/{userId}/{roleId}".</summary>
-    static string BuildPkRouteSegments(NamedEntity entity, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
+    static void EmitGetById(StringBuilder sb, string name, string pkProp, string pkType, string pkRouteConstraint)
     {
-        var pk = entity.Table.PrimaryKey!;
-        var segments = pk.ColumnNames.Select(n => $"{{{CasingHelper.ToCamelCase(n, corrections)}}}");
-        return "/" + string.Join("/", segments);
+        sb.AppendLine($"        group.MapGet(\"/{{id{pkRouteConstraint}}}\", async ({pkType} id, I{name}Queries queries, CancellationToken ct) =>");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var entity = await queries.GetByIdAsync(id, ct).ConfigureAwait(false);");
+        sb.AppendLine("            return entity is null ? Results.NotFound() : Results.Ok(entity.ToResponse());");
+        sb.AppendLine("        });");
+        sb.AppendLine();
     }
 
-    /// <summary>Lambda parameter list for PK columns with their C# types, e.g. "int id" or "int userId, int roleId".</summary>
-    static string BuildPkRouteParams(NamedEntity entity, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
+    static void EmitPost(StringBuilder sb, string name, string route, string pkProp, IReadOnlyList<Column> nonServerGenCols, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
-        var pk = entity.Table.PrimaryKey!;
-        return string.Join(", ", pk.ColumnNames.Select(n =>
+        sb.AppendLine($"        group.MapPost(\"/\", async (Create{name}Request request, I{name}Commands commands, IValidator<Create{name}Request> validator, CancellationToken ct) =>");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var validation = validator.Validate(request);");
+        sb.AppendLine("            if (!validation.IsValid) { return validation.ToBadRequest(); }");
+        sb.AppendLine();
+        sb.AppendLine($"            var command = new Create{name}Command(");
+        for (int i = 0; i < nonServerGenCols.Count; i++)
         {
-            var col = entity.Table.Columns.First(c =>
-                string.Equals(c.Name, n, System.StringComparison.OrdinalIgnoreCase));
-            return $"{SqlTypeMap.ToCs(col.ClrType)} {CasingHelper.ToCamelCase(n, corrections)}";
-        }));
+            var col = nonServerGenCols[i];
+            var prop = EntityNaming.PropertyName(col, corrections);
+            var terminator = i == nonServerGenCols.Count - 1 ? ");" : ",";
+            sb.AppendLine($"                request.{prop}{terminator}");
+        }
+        sb.AppendLine();
+        sb.AppendLine("            var entity = await commands.CreateAsync(command, ct).ConfigureAwait(false);");
+        sb.AppendLine($"            return Results.Created($\"/api/{route}/{{entity.{pkProp}}}\", entity.ToResponse());");
+        sb.AppendLine("        });");
+        sb.AppendLine();
     }
 
-    /// <summary>Comma-separated camelCase PK argument names for mapper calls, e.g. "id" or "userId, roleId".</summary>
-    static string BuildPkArgNames(NamedEntity entity, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
+    static void EmitPut(StringBuilder sb, string name, string pkColName, string pkProp, string pkType, string pkRouteConstraint,
+        IReadOnlyList<Column> allCols, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections,
+        string verb, string commandPrefix)
     {
-        var pk = entity.Table.PrimaryKey!;
-        return string.Join(", ", pk.ColumnNames.Select(n => CasingHelper.ToCamelCase(n, corrections)));
+        var commandType = $"{commandPrefix}{name}Command";
+        var requestType = $"Update{name}Request"; // Same Request type for Put and Patch
+        var mapVerb = verb == "Put" ? "MapPut" : "MapPatch";
+
+        sb.AppendLine($"        group.{mapVerb}(\"/{{id{pkRouteConstraint}}}\", async ({pkType} id, {requestType} request, I{name}Commands commands, IValidator<{requestType}> validator, CancellationToken ct) =>");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var validation = validator.Validate(request);");
+        sb.AppendLine("            if (!validation.IsValid) { return validation.ToBadRequest(); }");
+        sb.AppendLine();
+        sb.AppendLine($"            var command = new {commandType}(");
+        for (int i = 0; i < allCols.Count; i++)
+        {
+            var col = allCols[i];
+            var prop = EntityNaming.PropertyName(col, corrections);
+            var value = string.Equals(col.Name, pkColName, System.StringComparison.OrdinalIgnoreCase) ? "id" : $"request.{prop}";
+            var terminator = i == allCols.Count - 1 ? ");" : ",";
+            sb.AppendLine($"                {value}{terminator}");
+        }
+        sb.AppendLine();
+        sb.AppendLine("            var entity = await commands." + (verb == "Put" ? "UpdateAsync" : "PatchAsync") + "(command, ct).ConfigureAwait(false);");
+        sb.AppendLine("            return entity is null ? Results.NotFound() : Results.Ok(entity.ToResponse());");
+        sb.AppendLine("        });");
+        sb.AppendLine();
+    }
+
+    static void EmitDelete(StringBuilder sb, string name, string pkProp, string pkType, string pkRouteConstraint)
+    {
+        sb.AppendLine($"        group.MapDelete(\"/{{id{pkRouteConstraint}}}\", async ({pkType} id, I{name}Commands commands, CancellationToken ct) =>");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var deleted = await commands.DeleteAsync(id, ct).ConfigureAwait(false);");
+        sb.AppendLine("            return deleted ? Results.NoContent() : Results.NotFound();");
+        sb.AppendLine("        });");
+        sb.AppendLine();
     }
 }

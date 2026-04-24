@@ -81,6 +81,13 @@ public static class CleanLayout
     public static string ApplicationFeatureAbstractionsNamespace(string root, string entityTypeName) =>
         $"{root}.Application.Features.{Pluralize(entityTypeName)}.Abstractions";
 
+    // Phase G — Api Mappings helpers
+    public static string ApiMappingsPath(string root, string className) =>
+        $"{ApiDir(root)}/Mappings/{className}.cs";
+
+    public static string ApiMappingsNamespace(string root) =>
+        $"{root}.Api.Mappings";
+
     // Phase F — Validator helpers
     public static string ApplicationValidatorsPath(string root, string className) =>
         $"{ApplicationDir(root)}/Validators/{className}.cs";
