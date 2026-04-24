@@ -8,8 +8,9 @@ using Artect.Naming;
 namespace Artect.Generation.Emitters;
 
 /// <summary>
-/// Emits &lt;Project&gt;.Infrastructure.Tests project — abstract contract test bases (LSP)
-/// for repository interfaces, EF InMemory-backed concrete tests, and EF mapping round-trip tests.
+/// Emits &lt;Project&gt;.Infrastructure.Tests project — EF Core InMemory tests for each
+/// &lt;Entity&gt;DataAccess class. One test class per entity; each CRUD method is guarded by
+/// its corresponding <see cref="CrudOperation"/> flag.
 /// Gated by <c>cfg.IncludeTestsProject</c> and <c>cfg.DataAccess == EfCore</c>.
 /// </summary>
 public sealed class InfrastructureTestsEmitter : IEmitter
@@ -34,7 +35,7 @@ public sealed class InfrastructureTestsEmitter : IEmitter
             if (entity.IsJoinTable) continue;
             if (!entity.HasPrimaryKey) continue;
 
-            list.AddRange(BuildEntityTests(ctx, testsDir, entity));
+            list.Add(BuildDataAccessTests(ctx, testsDir, entity));
         }
 
         return list;
@@ -55,158 +56,104 @@ public sealed class InfrastructureTestsEmitter : IEmitter
     </PackageReference>
     <PackageReference Include=""Microsoft.NET.Test.Sdk"" Version=""17.*"" />
     <PackageReference Include=""Microsoft.EntityFrameworkCore.InMemory"" Version=""9.*"" />
-    <PackageReference Include=""FluentAssertions"" Version=""6.*"" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include=""../../src/{project}.Application/{project}.Application.csproj"" />
     <ProjectReference Include=""../../src/{project}.Infrastructure/{project}.Infrastructure.csproj"" />
-    <ProjectReference Include=""../../src/{project}.Domain/{project}.Domain.csproj"" />
   </ItemGroup>
 </Project>";
 
-    static IEnumerable<EmittedFile> BuildEntityTests(EmitterContext ctx, string testsDir, NamedEntity entity)
+    static EmittedFile BuildDataAccessTests(EmitterContext ctx, string testsDir, NamedEntity entity)
     {
         var project = ctx.Config.ProjectName;
-
-        yield return BuildMonolithicRepositoryContract(project, testsDir, entity);
-        yield return BuildMonolithicRepositoryTests(project, testsDir, entity);
-        yield return BuildMappingTests(project, testsDir, entity, ctx.NamingCorrections);
-    }
-
-    // ── Monolithic repository ─────────────────────────────────────────────────
-
-    static EmittedFile BuildMonolithicRepositoryContract(string project, string testsDir, NamedEntity entity)
-    {
         var e = entity.EntityTypeName;
-        var repoAbsNs = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
-        var modelsNs = CleanLayout.ApplicationDtosNamespace(project);
-        var commonNs = CleanLayout.ApplicationCommonNamespace(project);
+        var plural = entity.DbSetPropertyName;
+        var dbCtx = $"{project}DbContext";
+        var crud = ctx.Config.Crud;
+        var corrections = ctx.NamingCorrections;
+
+        var featureNs = CleanLayout.ApplicationFeatureNamespace(project, e);
+        var absNs = CleanLayout.ApplicationFeatureAbstractionsNamespace(project, e);
+        var infraDataNs = $"{CleanLayout.InfrastructureNamespace(project)}.Data";
+        var dataEntityNs = CleanLayout.InfrastructureDataEntityNamespace(project, e);
+        var classNs = $"{project}.Infrastructure.Tests.Data.{plural}";
 
         var pk = entity.Table.PrimaryKey!;
-        var pkNames = pk.ColumnNames.ToHashSet(System.StringComparer.OrdinalIgnoreCase);
-        var pkCol = entity.Table.Columns.First(c => pkNames.Contains(c.Name));
-        var pkDefaultLiteral = DefaultLiteralFor(pkCol.ClrType);
+        var pkColName = pk.ColumnNames[0];
+        var pkCol = entity.Table.Columns.First(c =>
+            string.Equals(c.Name, pkColName, System.StringComparison.OrdinalIgnoreCase));
+        var pkType = SqlTypeMap.ToCs(pkCol.ClrType);
+        var pkDefault = DefaultLiteralFor(pkCol.ClrType);
+
+        var nonServerGen = entity.Table.Columns.Where(c => !c.IsServerGenerated).ToList();
 
         var sb = new StringBuilder();
         sb.AppendLine("using System.Threading.Tasks;");
-        sb.AppendLine("using FluentAssertions;");
-        sb.AppendLine("using Xunit;");
-        sb.AppendLine($"using {repoAbsNs};");
-        sb.AppendLine($"using {modelsNs};");
-        sb.AppendLine($"using {commonNs};");
-        sb.AppendLine();
-        sb.AppendLine($"namespace {project}.Infrastructure.Tests.Contracts;");
-        sb.AppendLine();
-        sb.AppendLine($"/// <summary>");
-        sb.AppendLine($"/// Liskov Substitution: every implementation of I{e}Repository must pass these tests.");
-        sb.AppendLine($"/// </summary>");
-        sb.AppendLine($"public abstract class {e}RepositoryContract");
-        sb.AppendLine("{");
-        sb.AppendLine($"    protected abstract I{e}Repository CreateSut();");
-        sb.AppendLine();
-        sb.AppendLine("    [Fact]");
-        sb.AppendLine($"    public async Task GetByIdAsync_returns_null_for_missing_id()");
-        sb.AppendLine("    {");
-        sb.AppendLine("        var sut = CreateSut();");
-        sb.AppendLine($"        var result = await sut.GetByIdAsync({pkDefaultLiteral}, default);");
-        sb.AppendLine("        result.Should().BeNull();");
-        sb.AppendLine("    }");
-        sb.AppendLine();
-        sb.AppendLine("    [Fact]");
-        sb.AppendLine($"    public async Task ListAsync_returns_empty_page_on_empty_store()");
-        sb.AppendLine("    {");
-        sb.AppendLine("        var sut = CreateSut();");
-        sb.AppendLine($"        var result = await sut.ListAsync(1, 10, default);");
-        sb.AppendLine("        result.Should().NotBeNull();");
-        sb.AppendLine("        result.Items.Should().BeEmpty();");
-        sb.AppendLine("        result.TotalCount.Should().Be(0);");
-        sb.AppendLine("    }");
-        sb.AppendLine("}");
-
-        return new EmittedFile($"{testsDir}/Contracts/{e}RepositoryContract.cs", sb.ToString());
-    }
-
-    static EmittedFile BuildMonolithicRepositoryTests(string project, string testsDir, NamedEntity entity)
-    {
-        var e = entity.EntityTypeName;
-        var dbCtx = $"{project}DbContext";
-        var infraDataNs = $"{CleanLayout.InfrastructureNamespace(project)}.Data";
-        var infraRepoNs = $"{CleanLayout.InfrastructureNamespace(project)}.Repositories";
-        var repoAbsNs = $"{CleanLayout.ApplicationNamespace(project)}.Abstractions.Repositories";
-
-        var sb = new StringBuilder();
-        sb.AppendLine("using Microsoft.EntityFrameworkCore;");
-        sb.AppendLine($"using {infraDataNs};");
-        sb.AppendLine($"using {infraRepoNs};");
-        sb.AppendLine($"using {repoAbsNs};");
-        sb.AppendLine($"using {project}.Infrastructure.Tests.Contracts;");
-        sb.AppendLine();
-        sb.AppendLine($"namespace {project}.Infrastructure.Tests.Repositories;");
-        sb.AppendLine();
-        sb.AppendLine($"public class Ef{e}RepositoryTests : {e}RepositoryContract");
-        sb.AppendLine("{");
-        sb.AppendLine($"    protected override I{e}Repository CreateSut()");
-        sb.AppendLine("    {");
-        sb.AppendLine($"        var options = new DbContextOptionsBuilder<{dbCtx}>()");
-        sb.AppendLine($"            .UseInMemoryDatabase(\"Ef{e}Repo-\" + System.Guid.NewGuid().ToString(\"N\"))");
-        sb.AppendLine("            .Options;");
-        sb.AppendLine($"        return new {e}Repository(new {dbCtx}(options));");
-        sb.AppendLine("    }");
-        sb.AppendLine("}");
-
-        return new EmittedFile($"{testsDir}/Repositories/Ef{e}RepositoryTests.cs", sb.ToString());
-    }
-
-    // ── EF mapping round-trip ──────────────────────────────────────────────────
-
-    static EmittedFile BuildMappingTests(string project, string testsDir, NamedEntity entity, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
-    {
-        var e = entity.EntityTypeName;
-        var dbCtx = $"{project}DbContext";
-        var infraDataNs = $"{CleanLayout.InfrastructureNamespace(project)}.Data";
-        var entityNs = $"{CleanLayout.DomainNamespace(project)}.Entities";
-
-        var pk = entity.Table.PrimaryKey!;
-        var pkNames = pk.ColumnNames.ToHashSet(System.StringComparer.OrdinalIgnoreCase);
-        var pkCol = entity.Table.Columns.First(c => pkNames.Contains(c.Name));
-        var pkProp = EntityNaming.PropertyName(pkCol, corrections);
-
-        var nonGenCols = entity.Table.Columns.Where(c => !c.IsServerGenerated).ToList();
-        var initBody = string.Join(", ",
-            nonGenCols.Select(c => $"{EntityNaming.PropertyName(c, corrections)} = {ValidPlaceholder(c)}"));
-
-        var sb = new StringBuilder();
-        sb.AppendLine("using System.Linq;");
-        sb.AppendLine("using System.Threading.Tasks;");
-        sb.AppendLine("using FluentAssertions;");
         sb.AppendLine("using Microsoft.EntityFrameworkCore;");
         sb.AppendLine("using Xunit;");
+        sb.AppendLine($"using {featureNs};");
+        sb.AppendLine($"using {absNs};");
         sb.AppendLine($"using {infraDataNs};");
-        sb.AppendLine($"using {entityNs};");
+        sb.AppendLine($"using {dataEntityNs};");
         sb.AppendLine();
-        sb.AppendLine($"namespace {project}.Infrastructure.Tests.Mappings;");
+        sb.AppendLine($"namespace {classNs};");
         sb.AppendLine();
-        sb.AppendLine($"public class {e}MappingTests");
+        sb.AppendLine($"public class {e}DataAccessTests");
         sb.AppendLine("{");
-        sb.AppendLine("    [Fact]");
-        sb.AppendLine($"    public async Task {e}_can_be_added_and_retrieved_from_InMemory_DbContext()");
-        sb.AppendLine("    {");
-        sb.AppendLine($"        var options = new DbContextOptionsBuilder<{dbCtx}>()");
-        sb.AppendLine($"            .UseInMemoryDatabase(\"{e}Mapping-\" + System.Guid.NewGuid().ToString(\"N\"))");
-        sb.AppendLine("            .Options;");
+        sb.AppendLine($"    private static {dbCtx} CreateDb(string? dbName = null) =>");
+        sb.AppendLine($"        new {dbCtx}(new DbContextOptionsBuilder<{dbCtx}>()");
+        sb.AppendLine($"            .UseInMemoryDatabase(dbName ?? $\"{e}-{{System.Guid.NewGuid()}}\").Options);");
         sb.AppendLine();
-        sb.AppendLine($"        await using var ctx = new {dbCtx}(options);");
-        sb.AppendLine($"        var entity = new {e} {{ {initBody} }};");
-        sb.AppendLine($"        await ctx.AddAsync(entity);");
-        sb.AppendLine("        await ctx.SaveChangesAsync();");
-        sb.AppendLine();
-        sb.AppendLine($"        await using var ctx2 = new {dbCtx}(options);");
-        sb.AppendLine($"        var found = await ctx2.Set<{e}>().FirstOrDefaultAsync();");
-        sb.AppendLine("        found.Should().NotBeNull();");
-        sb.AppendLine("    }");
+
+        // GetByIdAsync null-path (only if GetById is enabled)
+        if ((crud & CrudOperation.GetById) != 0)
+        {
+            sb.AppendLine("    [Fact]");
+            sb.AppendLine($"    public async Task GetByIdAsync_returns_null_when_missing()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        using var db = CreateDb();");
+            sb.AppendLine($"        var sut = new {e}DataAccess(db);");
+            sb.AppendLine($"        var result = await sut.GetByIdAsync({pkDefault}, default);");
+            sb.AppendLine("        Assert.Null(result);");
+            sb.AppendLine("    }");
+        }
+
+        // CreateAsync persistence test (only if Post is enabled)
+        if ((crud & CrudOperation.Post) != 0)
+        {
+            var initBody = string.Join(", ",
+                nonServerGen.Select(c => $"{EntityNaming.PropertyName(c, corrections)} = {ValidPlaceholder(c)}"));
+
+            sb.AppendLine();
+            sb.AppendLine("    [Fact]");
+            sb.AppendLine($"    public async Task CreateAsync_persists_and_returns_dto()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        using var db = CreateDb();");
+            sb.AppendLine($"        var sut = new {e}DataAccess(db);");
+            sb.AppendLine($"        var command = new Create{e}Command {{ {initBody} }};");
+            sb.AppendLine("        var dto = await sut.CreateAsync(command, default);");
+            sb.AppendLine("        Assert.NotNull(dto);");
+            sb.AppendLine("    }");
+        }
+
+        // GetPagedAsync empty-store test (only if GetList is enabled)
+        if ((crud & CrudOperation.GetList) != 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("    [Fact]");
+            sb.AppendLine($"    public async Task GetPagedAsync_returns_empty_on_empty_store()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        using var db = CreateDb();");
+            sb.AppendLine($"        var sut = new {e}DataAccess(db);");
+            sb.AppendLine("        var (items, total) = await sut.GetPagedAsync(1, 10, default);");
+            sb.AppendLine("        Assert.Empty(items);");
+            sb.AppendLine("        Assert.Equal(0, total);");
+            sb.AppendLine("    }");
+        }
+
         sb.AppendLine("}");
 
-        return new EmittedFile($"{testsDir}/Mappings/{e}MappingTests.cs", sb.ToString());
+        return new EmittedFile($"{testsDir}/Data/{plural}/{e}DataAccessTests.cs", sb.ToString());
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

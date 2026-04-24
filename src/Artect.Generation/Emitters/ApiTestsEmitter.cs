@@ -45,6 +45,10 @@ public sealed class ApiTestsEmitter : IEmitter
             list.Add(new EmittedFile(
                 $"{testsDir}/Endpoints/{plural}EndpointsTests.cs",
                 BuildEndpointTest(entity, plural, route, testProject, project, ctx.Config, ctx.NamingCorrections)));
+
+            list.Add(new EmittedFile(
+                $"{testsDir}/Mappings/{entity.EntityTypeName}MappingTests.cs",
+                BuildMappingTest(entity, testProject, project, ctx.NamingCorrections)));
         }
 
         return list;
@@ -252,7 +256,69 @@ public sealed class ApiTestsEmitter : IEmitter
         return result.ToString();
     }
 
+    static string BuildMappingTest(
+        NamedEntity entity, string testsNs, string project,
+        System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
+    {
+        var e = entity.EntityTypeName;
+        var dtosNs = CleanLayout.ApplicationDtosNamespace(project);
+        var apiMapNs = CleanLayout.ApiMappingsNamespace(project);
+
+        // Pick the first non-server-generated scalar column as the assertion target.
+        var assertCol = entity.Table.Columns
+            .FirstOrDefault(c => !c.IsServerGenerated);
+        var assertProp = assertCol is not null
+            ? EntityNaming.PropertyName(assertCol, corrections)
+            : null;
+
+        // Build initializer for all non-server-generated columns.
+        var initBody = string.Join(", ", entity.Table.Columns
+            .Where(c => !c.IsServerGenerated)
+            .Select(c => $"{EntityNaming.PropertyName(c, corrections)} = {ValidApiPlaceholder(c)}"));
+
+        var sb = new StringBuilder();
+        sb.AppendLine("using Xunit;");
+        sb.AppendLine($"using {dtosNs};");
+        sb.AppendLine($"using {apiMapNs};");
+        sb.AppendLine();
+        sb.AppendLine($"namespace {testsNs}.Mappings;");
+        sb.AppendLine();
+        sb.AppendLine($"public class {e}MappingTests");
+        sb.AppendLine("{");
+        sb.AppendLine("    [Fact]");
+        sb.AppendLine($"    public void {e}Dto_ToResponse_copies_scalars()");
+        sb.AppendLine("    {");
+        sb.AppendLine($"        var dto = new {e}Dto {{ {initBody} }};");
+        sb.AppendLine("        var response = dto.ToResponse();");
+        if (assertProp is not null)
+            sb.AppendLine($"        Assert.Equal(dto.{assertProp}, response.{assertProp});");
+        else
+            sb.AppendLine("        Assert.NotNull(response);");
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+
+        return sb.ToString();
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    static string ValidApiPlaceholder(Column c) => c.ClrType switch
+    {
+        ClrType.String => $"\"valid-{c.Name.ToLowerInvariant()}\"",
+        ClrType.Int32 => "1",
+        ClrType.Int64 => "1L",
+        ClrType.Int16 => "(short)1",
+        ClrType.Byte => "(byte)1",
+        ClrType.Boolean => "false",
+        ClrType.Decimal => "1m",
+        ClrType.Double => "1.0",
+        ClrType.Single => "1.0f",
+        ClrType.DateTime => "System.DateTime.UtcNow",
+        ClrType.DateTimeOffset => "System.DateTimeOffset.UtcNow",
+        ClrType.Guid => "System.Guid.NewGuid()",
+        ClrType.ByteArray => "System.Array.Empty<byte>()",
+        _ => "default!",
+    };
 
     static List<(string Property, string Value)> BuildMinimallyValidOverrides(
         NamedEntity entity, System.Collections.Generic.HashSet<string> pkCols,
