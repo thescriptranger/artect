@@ -1,7 +1,0 @@
-namespace {{ Namespace }};
-
-/// <summary>Marker interface for query requests (read-only). Never wrapped by TransactionBehavior.</summary>
-public interface IQuery { }
-
-/// <summary>Marker interface for queries that produce a payload of type TPayload on success.</summary>
-public interface IQuery<TPayload> : IQuery { }

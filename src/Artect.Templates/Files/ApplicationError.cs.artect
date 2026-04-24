@@ -1,3 +1,0 @@
-namespace {{ Namespace }};
-
-public sealed record ApplicationError(string Field, string Code, string Message);
