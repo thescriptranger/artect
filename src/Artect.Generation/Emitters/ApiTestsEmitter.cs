@@ -103,6 +103,7 @@ public sealed class ApiTestsEmitter : IEmitter
         }
 
         return $$"""
+            using System.Linq;
             using Microsoft.AspNetCore.Hosting;
             using Microsoft.AspNetCore.Mvc.Testing;
             using Microsoft.EntityFrameworkCore;

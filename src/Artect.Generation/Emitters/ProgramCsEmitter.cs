@@ -47,7 +47,7 @@ public sealed class ProgramCsEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine("await app.RunAsync();");
         sb.AppendLine();
-        sb.AppendLine("public static partial class Program { }");
+        sb.AppendLine("public partial class Program { }");
         return sb.ToString();
     }
 }

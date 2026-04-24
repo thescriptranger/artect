@@ -121,8 +121,7 @@ public sealed class InfrastructureTestsEmitter : IEmitter
         // CreateAsync persistence test (only if Post is enabled)
         if ((crud & CrudOperation.Post) != 0)
         {
-            var initBody = string.Join(", ",
-                nonServerGen.Select(c => $"{EntityNaming.PropertyName(c, corrections)} = {ValidPlaceholder(c)}"));
+            var positionalArgs = string.Join(", ", nonServerGen.Select(c => ValidPlaceholder(c)));
 
             sb.AppendLine();
             sb.AppendLine("    [Fact]");
@@ -130,7 +129,7 @@ public sealed class InfrastructureTestsEmitter : IEmitter
             sb.AppendLine("    {");
             sb.AppendLine("        using var db = CreateDb();");
             sb.AppendLine($"        var sut = new {e}DataAccess(db);");
-            sb.AppendLine($"        var command = new Create{e}Command {{ {initBody} }};");
+            sb.AppendLine($"        var command = new Create{e}Command({positionalArgs});");
             sb.AppendLine("        var dto = await sut.CreateAsync(command, default);");
             sb.AppendLine("        Assert.NotNull(dto);");
             sb.AppendLine("    }");

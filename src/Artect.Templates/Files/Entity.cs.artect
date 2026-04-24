@@ -24,8 +24,6 @@ public sealed partial class {{ EntityName }}
 {{/for}}
 {{/if}}
 
-    private {{ EntityName }}() { }
-
     public static {{ DomainCommonNamespace }}.Result<{{ EntityName }}> Create(
 {{# for arg in CreateArgs }}
         {{ arg.ClrTypeWithNullability }} {{ arg.ParamName }}{{ arg.Comma }}
