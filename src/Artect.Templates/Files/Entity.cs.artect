@@ -20,7 +20,8 @@ public sealed partial class {{ EntityName }}
 {{# if HasCollectionNavigations }}
 
 {{# for nav in CollectionNavigations }}
-    public System.Collections.Generic.ICollection<{{ nav.TypeName }}> {{ nav.PropertyName }} { get; init; } = new System.Collections.Generic.List<{{ nav.TypeName }}>();
+    private readonly System.Collections.Generic.List<{{ nav.TypeName }}> {{ nav.BackingField }} = new();
+    public System.Collections.Generic.IReadOnlyCollection<{{ nav.TypeName }}> {{ nav.PropertyName }} => {{ nav.BackingField }};
 {{/for}}
 {{/if}}
 

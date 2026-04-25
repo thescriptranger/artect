@@ -15,6 +15,12 @@ public static class Pluralizer
         ["tooth"]="teeth",["foot"]="feet",["mouse"]="mice",["goose"]="geese"
     };
 
+    // Singular endings that the trailing-s rule must NOT strip.
+    // Status, Bus, Crisis, Atlas, Octopus, Bonus — the trailing 's' is part of the singular
+    // form, not a plural marker. Without this guard, Singularize("Status") returns "Statu",
+    // which propagates through every emitter as a malformed entity name.
+    static readonly string[] AlreadySingularSuffixes = { "us", "is", "as", "os" };
+
     public static string Pluralize(string word)
     {
         if (string.IsNullOrEmpty(word)) return word;
@@ -42,6 +48,10 @@ public static class Pluralizer
         if (lower.EndsWith("ves")) return word[..^3] + "f";
         if (lower.EndsWith("ses") || lower.EndsWith("xes") || lower.EndsWith("zes") || lower.EndsWith("ches") || lower.EndsWith("shes"))
             return word[..^2];
+        // Guard: words like "Status", "Bus", "Crisis", "Atlas" already are singular; the
+        // generic trailing-s rule below would otherwise strip them to "Statu", "Bu", etc.
+        foreach (var suffix in AlreadySingularSuffixes)
+            if (lower.EndsWith(suffix)) return word;
         if (lower.EndsWith("s") && !lower.EndsWith("ss")) return word[..^1];
         return word;
     }

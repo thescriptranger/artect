@@ -104,6 +104,13 @@ public static class CleanLayout
     public static string InfrastructureMappingNamespace(string root) =>
         $"{root}.Infrastructure.Mapping";
 
+    // EF Core IEntityTypeConfiguration<T> classes
+    public static string InfrastructureConfigurationsPath(string root, string className) =>
+        $"{InfrastructureDir(root)}/Data/Configurations/{className}.cs";
+
+    public static string InfrastructureConfigurationsNamespace(string root) =>
+        $"{root}.Infrastructure.Data.Configurations";
+
     static string Pluralize(string entityTypeName) =>
         Artect.Naming.CasingHelper.ToPascalCase(
             Artect.Naming.Pluralizer.Pluralize(entityTypeName),

@@ -5,9 +5,9 @@ namespace Artect.Generation.Emitters;
 
 /// <summary>
 /// Emits <c>Program.cs</c> into <c>src/&lt;Project&gt;.Api/</c>.
-/// IT Director shape: three AddX() calls, MapScalarApiReference() in Development,
-/// app.MapApiEndpoints() via EndpointRegistration, await app.RunAsync().
-/// Auth and versioning are not emitted here; users add them when needed.
+/// IT Director shape extended with the Phase-1 production middleware subset:
+/// global exception handler, ProblemDetails, /health, correlation IDs.
+/// CORS / auth / OTel / structured logging / rate limiting remain deferred to JD Framework.
 /// </summary>
 public sealed class ProgramCsEmitter : IEmitter
 {
@@ -23,6 +23,7 @@ public sealed class ProgramCsEmitter : IEmitter
     {
         var sb = new StringBuilder();
         sb.AppendLine($"using {project}.Api;");
+        sb.AppendLine($"using {project}.Api.Middleware;");
         sb.AppendLine($"using {project}.Application;");
         sb.AppendLine($"using {project}.Infrastructure;");
         sb.AppendLine("using Scalar.AspNetCore;");
@@ -30,11 +31,17 @@ public sealed class ProgramCsEmitter : IEmitter
         sb.AppendLine("var builder = WebApplication.CreateBuilder(args);");
         sb.AppendLine();
         sb.AppendLine("builder.Services.AddOpenApi();");
+        sb.AppendLine("builder.Services.AddProblemDetails();");
+        sb.AppendLine("builder.Services.AddExceptionHandler<GlobalExceptionHandler>();");
+        sb.AppendLine("builder.Services.AddHealthChecks();");
         sb.AppendLine("builder.Services.AddApi();");
         sb.AppendLine("builder.Services.AddApplication();");
         sb.AppendLine("builder.Services.AddInfrastructure(builder.Configuration);");
         sb.AppendLine();
         sb.AppendLine("var app = builder.Build();");
+        sb.AppendLine();
+        sb.AppendLine("app.UseExceptionHandler();");
+        sb.AppendLine("app.UseMiddleware<CorrelationIdMiddleware>();");
         sb.AppendLine();
         sb.AppendLine("if (app.Environment.IsDevelopment())");
         sb.AppendLine("{");
@@ -43,6 +50,7 @@ public sealed class ProgramCsEmitter : IEmitter
         sb.AppendLine("}");
         sb.AppendLine();
         sb.AppendLine("app.UseHttpsRedirection();");
+        sb.AppendLine("app.MapHealthChecks(\"/health\");");
         sb.AppendLine("app.MapApiEndpoints();");
         sb.AppendLine();
         sb.AppendLine("await app.RunAsync();");

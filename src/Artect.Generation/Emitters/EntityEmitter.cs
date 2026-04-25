@@ -33,17 +33,33 @@ public sealed class EntityEmitter : IEmitter
             .ToList();
 
         var invariantLines = new List<string>();
+        var commonNs = CleanLayout.DomainCommonNamespace(ctx.Config.ProjectName);
         foreach (var col in factoryArgs)
         {
             var paramName = Artect.Naming.CasingHelper.ToCamelCase(col.Name, corrections);
             if (!col.IsNullable && col.ClrType == ClrType.String)
             {
-                invariantLines.Add($"if (string.IsNullOrWhiteSpace({paramName})) errors.Add(new {CleanLayout.DomainCommonNamespace(ctx.Config.ProjectName)}.DomainError(\"{paramName}\", \"required\", \"{col.Name} is required.\"));");
+                invariantLines.Add($"if (string.IsNullOrWhiteSpace({paramName})) errors.Add(new {commonNs}.DomainError(\"{paramName}\", \"required\", \"{col.Name} is required.\"));");
             }
             if (col.ClrType == ClrType.String && col.MaxLength is int max && max > 0)
             {
-                invariantLines.Add($"if ({paramName} is {{ Length: > {max} }}) errors.Add(new {CleanLayout.DomainCommonNamespace(ctx.Config.ProjectName)}.DomainError(\"{paramName}\", \"maxLength\", \"{col.Name} must be at most {max} characters.\"));");
+                invariantLines.Add($"if ({paramName} is {{ Length: > {max} }}) errors.Add(new {commonNs}.DomainError(\"{paramName}\", \"maxLength\", \"{col.Name} must be at most {max} characters.\"));");
             }
+            if (!col.IsNullable && col.ClrType == ClrType.Guid)
+            {
+                invariantLines.Add($"if ({paramName} == System.Guid.Empty) errors.Add(new {commonNs}.DomainError(\"{paramName}\", \"required\", \"{col.Name} is required.\"));");
+            }
+        }
+
+        // Paired created-/updated-timestamp check: if both a "Created*" and "Updated*" column
+        // are present in the factory args and both are date-typed, emit Updated >= Created.
+        var createdCol = factoryArgs.FirstOrDefault(c => IsDateLike(c) && IsCreatedTimestampName(c.Name));
+        var updatedCol = factoryArgs.FirstOrDefault(c => IsDateLike(c) && IsUpdatedTimestampName(c.Name));
+        if (createdCol is not null && updatedCol is not null)
+        {
+            var createdParam = Artect.Naming.CasingHelper.ToCamelCase(createdCol.Name, corrections);
+            var updatedParam = Artect.Naming.CasingHelper.ToCamelCase(updatedCol.Name, corrections);
+            invariantLines.Add($"if ({updatedParam} < {createdParam}) errors.Add(new {commonNs}.DomainError(\"{updatedParam}\", \"invalid_date\", \"{updatedCol.Name} cannot be before {createdCol.Name}.\"));");
         }
 
         var createArgs = factoryArgs.Select((c, i) => new
@@ -78,6 +94,7 @@ public sealed class EntityEmitter : IEmitter
             {
                 TypeName = n.TargetEntityTypeName,
                 PropertyName = n.PropertyName,
+                BackingField = "_" + Artect.Naming.CasingHelper.ToCamelCase(n.PropertyName),
             }).ToList(),
             CreateArgs = createArgs,
             Invariants = invariantLines.Select(l => new { Line = l }).ToList(),
@@ -91,4 +108,16 @@ public sealed class EntityEmitter : IEmitter
         if (c.IsNullable && c.ClrType == ClrType.String) return cs + "?";
         return cs;
     }
+
+    static bool IsDateLike(Column c) =>
+        c.ClrType == ClrType.DateTime ||
+        c.ClrType == ClrType.DateTimeOffset ||
+        c.ClrType == ClrType.DateOnly;
+
+    static bool IsCreatedTimestampName(string name) =>
+        name.StartsWith("Created", System.StringComparison.OrdinalIgnoreCase);
+
+    static bool IsUpdatedTimestampName(string name) =>
+        name.StartsWith("Updated", System.StringComparison.OrdinalIgnoreCase) ||
+        name.StartsWith("Modified", System.StringComparison.OrdinalIgnoreCase);
 }
