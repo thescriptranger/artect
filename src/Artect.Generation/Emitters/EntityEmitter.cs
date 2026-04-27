@@ -94,7 +94,7 @@ public sealed class EntityEmitter : IEmitter
             {
                 TypeName = n.TargetEntityTypeName,
                 PropertyName = n.PropertyName,
-                BackingField = "_" + Artect.Naming.CasingHelper.ToCamelCase(n.PropertyName),
+                BackingField = BackingFieldName(n.PropertyName),
             }).ToList(),
             CreateArgs = createArgs,
             Invariants = invariantLines.Select(l => new { Line = l }).ToList(),
@@ -113,6 +113,20 @@ public sealed class EntityEmitter : IEmitter
         c.ClrType == ClrType.DateTime ||
         c.ClrType == ClrType.DateTimeOffset ||
         c.ClrType == ClrType.DateOnly;
+
+    /// <summary>
+    /// Builds the backing-field name for a collection navigation so that EF Core's
+    /// backing-field convention discovery matches the property when
+    /// <c>PropertyAccessMode.Field</c> is set. EF looks for <c>_&lt;camelCase&gt;</c>
+    /// where camelCase = lowercase the first letter and preserve the rest verbatim.
+    /// We must NOT route through <see cref="Artect.Naming.CasingHelper.ToCamelCase"/>
+    /// because it splits on underscores and would lose them — disambiguated names
+    /// like <c>BillingProfiles_ChargesBillToProfileId</c> would no longer match.
+    /// </summary>
+    static string BackingFieldName(string propertyName) =>
+        propertyName.Length == 0
+            ? "_"
+            : "_" + char.ToLowerInvariant(propertyName[0]) + propertyName[1..];
 
     static bool IsCreatedTimestampName(string name) =>
         name.StartsWith("Created", System.StringComparison.OrdinalIgnoreCase);
