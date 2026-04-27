@@ -8,15 +8,16 @@ using Artect.Naming;
 namespace Artect.Generation.Emitters;
 
 /// <summary>
-/// Emits per-entity I&lt;Entity&gt;Commands interfaces into
-/// Application/Features/&lt;Plural&gt;/Abstractions/.
+/// Emits per-entity I&lt;Entity&gt;ReadService interfaces into
+/// Application/Features/&lt;Plural&gt;/Abstractions/. Read-side projections that
+/// never expose the domain entity directly.
 /// </summary>
-public sealed class FeatureCommandsInterfaceEmitter : IEmitter
+public sealed class ReadServiceInterfaceEmitter : IEmitter
 {
     public IReadOnlyList<EmittedFile> Emit(EmitterContext ctx)
     {
         var crud = ctx.Config.Crud;
-        if ((crud & (CrudOperation.Post | CrudOperation.Put | CrudOperation.Patch | CrudOperation.Delete)) == 0)
+        if ((crud & (CrudOperation.GetList | CrudOperation.GetById)) == 0)
             return System.Array.Empty<EmittedFile>();
 
         var list = new List<EmittedFile>();
@@ -28,30 +29,24 @@ public sealed class FeatureCommandsInterfaceEmitter : IEmitter
             if (entity.IsJoinTable) continue;
             if (!entity.HasPrimaryKey) continue;
 
-            var name = entity.EntityTypeName;
-            var ns = CleanLayout.ApplicationFeatureAbstractionsNamespace(project, name);
-            var featureNs = CleanLayout.ApplicationFeatureNamespace(project, name);
+            var name   = entity.EntityTypeName;
+            var ns     = CleanLayout.ApplicationFeatureAbstractionsNamespace(project, name);
             var pkType = PkType(entity.Table);
 
             var sb = new StringBuilder();
             sb.AppendLine($"using {dtosNs};");
-            sb.AppendLine($"using {featureNs};");
             sb.AppendLine();
             sb.AppendLine($"namespace {ns};");
             sb.AppendLine();
-            sb.AppendLine($"public interface I{name}Commands");
+            sb.AppendLine($"public interface I{name}ReadService");
             sb.AppendLine("{");
-            if ((crud & CrudOperation.Post) != 0)
-                sb.AppendLine($"    Task<{name}Dto> CreateAsync(Create{name}Command command, CancellationToken ct);");
-            if ((crud & CrudOperation.Put) != 0)
-                sb.AppendLine($"    Task<{name}Dto?> UpdateAsync(Update{name}Command command, CancellationToken ct);");
-            if ((crud & CrudOperation.Patch) != 0)
-                sb.AppendLine($"    Task<{name}Dto?> PatchAsync(Patch{name}Command command, CancellationToken ct);");
-            if ((crud & CrudOperation.Delete) != 0)
-                sb.AppendLine($"    Task<bool> DeleteAsync({pkType} id, CancellationToken ct);");
+            if ((crud & CrudOperation.GetList) != 0)
+                sb.AppendLine($"    Task<(IReadOnlyList<{name}Dto> Items, int TotalCount)> GetPagedAsync(int page, int pageSize, CancellationToken ct);");
+            if ((crud & CrudOperation.GetById) != 0)
+                sb.AppendLine($"    Task<{name}Dto?> GetByIdAsync({pkType} id, CancellationToken ct);");
             sb.AppendLine("}");
 
-            var path = CleanLayout.ApplicationFeatureAbstractionsPath(project, name, $"I{name}Commands");
+            var path = CleanLayout.ApplicationFeatureAbstractionsPath(project, name, $"I{name}ReadService");
             list.Add(new EmittedFile(path, sb.ToString()));
         }
         return list;

@@ -41,6 +41,27 @@ public static class CleanLayout
     public static string DomainCommonPath(string root, string className) => $"{DomainDir(root)}/Common/{className}.cs";
     public static string DomainCommonNamespace(string root) => $"{root}.Domain.Common";
 
+    // Phase 2 — Application layer abstractions and use-case extension points
+    public static string ApplicationAbstractionsPath(string root, string className) =>
+        $"{ApplicationDir(root)}/Abstractions/{className}.cs";
+
+    public static string ApplicationAbstractionsNamespace(string root) =>
+        $"{root}.Application.Abstractions";
+
+    public static string ApplicationUseCasesPath(string root, string className) =>
+        $"{ApplicationDir(root)}/UseCases/{className}.cs";
+
+    public static string ApplicationUseCasesNamespace(string root) =>
+        $"{root}.Application.UseCases";
+
+    // Phase 2 — DtoMapper moves from Infrastructure/Mapping to Application/Mappings
+    // so handlers in Application can call it without a downward layer reference.
+    public static string ApplicationMappingsPath(string root, string className) =>
+        $"{ApplicationDir(root)}/Mappings/{className}.cs";
+
+    public static string ApplicationMappingsNamespace(string root) =>
+        $"{root}.Application.Mappings";
+
     // Application-internal types (Phase C)
     public static string ApplicationDtosPath(string root, string className) => $"{ApplicationDir(root)}/Dtos/{className}.cs";
     public static string ApplicationDtosNamespace(string root) => $"{root}.Application.Dtos";
@@ -97,12 +118,6 @@ public static class CleanLayout
 
     public static string InfrastructureDataEntityNamespace(string root, string entityTypeName) =>
         $"{root}.Infrastructure.Data.{Pluralize(entityTypeName)}";
-
-    public static string InfrastructureMappingPath(string root, string className) =>
-        $"{InfrastructureDir(root)}/Mapping/{className}.cs";
-
-    public static string InfrastructureMappingNamespace(string root) =>
-        $"{root}.Infrastructure.Mapping";
 
     // EF Core IEntityTypeConfiguration<T> classes
     public static string InfrastructureConfigurationsPath(string root, string className) =>

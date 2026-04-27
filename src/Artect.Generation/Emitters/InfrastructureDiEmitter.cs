@@ -15,12 +15,14 @@ public sealed class InfrastructureDiEmitter : IEmitter
         var dbCtx   = $"{project}DbContext";
         var dataNs  = $"{CleanLayout.InfrastructureNamespace(project)}.Data";
         var infraNs = CleanLayout.InfrastructureNamespace(project);
+        var appAbsNs = CleanLayout.ApplicationAbstractionsNamespace(project);
 
         var sb = new StringBuilder();
         sb.AppendLine("using Microsoft.EntityFrameworkCore;");
         sb.AppendLine("using Microsoft.Extensions.Configuration;");
         sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
         sb.AppendLine($"using {dataNs};");
+        sb.AppendLine($"using {appAbsNs};");
 
         var entities = ctx.Model.Entities.Where(e => !e.IsJoinTable && e.HasPrimaryKey).ToList();
         foreach (var entity in entities.OrderBy(e => e.EntityTypeName, System.StringComparer.Ordinal))
@@ -43,13 +45,14 @@ public sealed class InfrastructureDiEmitter : IEmitter
         sb.AppendLine("                \"appsettings.Development.json, or the ConnectionStrings__DefaultConnection environment variable.\");");
         sb.AppendLine();
         sb.AppendLine($"        services.AddDbContext<{dbCtx}>(options => options.UseSqlServer(connectionString));");
+        sb.AppendLine("        services.AddScoped<IUnitOfWork, EfUnitOfWork>();");
         sb.AppendLine();
 
         foreach (var entity in entities.OrderBy(e => e.EntityTypeName, System.StringComparer.Ordinal))
         {
             var name = entity.EntityTypeName;
-            sb.AppendLine($"        services.AddScoped<I{name}Queries, {name}DataAccess>();");
-            sb.AppendLine($"        services.AddScoped<I{name}Commands, {name}DataAccess>();");
+            sb.AppendLine($"        services.AddScoped<I{name}Repository, {name}Repository>();");
+            sb.AppendLine($"        services.AddScoped<I{name}ReadService, {name}ReadService>();");
         }
 
         sb.AppendLine();

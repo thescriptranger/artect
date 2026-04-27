@@ -8,10 +8,12 @@ using Artect.Naming;
 namespace Artect.Generation.Emitters;
 
 /// <summary>
-/// Emits &lt;Project&gt;.Infrastructure.Tests project — EF Core InMemory tests for each
-/// &lt;Entity&gt;DataAccess class. One test class per entity; each CRUD method is guarded by
-/// its corresponding <see cref="CrudOperation"/> flag.
-/// Gated by <c>cfg.IncludeTestsProject</c> and <c>cfg.DataAccess == EfCore</c>.
+/// Emits &lt;Project&gt;.Infrastructure.Tests project — EF Core InMemory tests for the
+/// Phase 2 data-access shape. Per entity, emits one &lt;Entity&gt;RepositoryTests
+/// class (write side, exercising Create&lt;Entity&gt;Handler + &lt;Entity&gt;Repository +
+/// EfUnitOfWork together) and one &lt;Entity&gt;ReadServiceTests class (read-side
+/// projections). Each test is guarded by its corresponding <see cref="CrudOperation"/>
+/// flag. Gated by <c>cfg.IncludeTestsProject</c> and <c>cfg.DataAccess == EfCore</c>.
 /// </summary>
 public sealed class InfrastructureTestsEmitter : IEmitter
 {
@@ -30,12 +32,17 @@ public sealed class InfrastructureTestsEmitter : IEmitter
             new EmittedFile($"{testsDir}/{testProject}.csproj", BuildCsproj(project, tfm)),
         };
 
+        var crud = ctx.Config.Crud;
+        var emitRepoTests = (crud & (CrudOperation.Post | CrudOperation.GetById)) != 0;
+        var emitReadTests = (crud & (CrudOperation.GetList | CrudOperation.GetById)) != 0;
+
         foreach (var entity in ctx.Model.Entities)
         {
             if (entity.IsJoinTable) continue;
             if (!entity.HasPrimaryKey) continue;
 
-            list.Add(BuildDataAccessTests(ctx, testsDir, entity));
+            if (emitRepoTests) list.Add(BuildRepositoryTests(ctx, testsDir, entity));
+            if (emitReadTests) list.Add(BuildReadServiceTests(ctx, testsDir, entity));
         }
 
         return list;
@@ -63,26 +70,23 @@ public sealed class InfrastructureTestsEmitter : IEmitter
   </ItemGroup>
 </Project>";
 
-    static EmittedFile BuildDataAccessTests(EmitterContext ctx, string testsDir, NamedEntity entity)
+    static EmittedFile BuildRepositoryTests(EmitterContext ctx, string testsDir, NamedEntity entity)
     {
         var project = ctx.Config.ProjectName;
-        var e = entity.EntityTypeName;
-        var plural = entity.DbSetPropertyName;
-        var dbCtx = $"{project}DbContext";
-        var crud = ctx.Config.Crud;
-        var corrections = ctx.NamingCorrections;
+        var e       = entity.EntityTypeName;
+        var plural  = entity.DbSetPropertyName;
+        var dbCtx   = $"{project}DbContext";
+        var crud    = ctx.Config.Crud;
 
-        var featureNs = CleanLayout.ApplicationFeatureNamespace(project, e);
-        var absNs = CleanLayout.ApplicationFeatureAbstractionsNamespace(project, e);
-        var infraDataNs = $"{CleanLayout.InfrastructureNamespace(project)}.Data";
+        var featureNs    = CleanLayout.ApplicationFeatureNamespace(project, e);
+        var infraDataNs  = $"{CleanLayout.InfrastructureNamespace(project)}.Data";
         var dataEntityNs = CleanLayout.InfrastructureDataEntityNamespace(project, e);
-        var classNs = $"{project}.Infrastructure.Tests.Data.{plural}";
+        var classNs      = $"{project}.Infrastructure.Tests.Data.{plural}";
 
         var pk = entity.Table.PrimaryKey!;
         var pkColName = pk.ColumnNames[0];
         var pkCol = entity.Table.Columns.First(c =>
             string.Equals(c.Name, pkColName, System.StringComparison.OrdinalIgnoreCase));
-        var pkType = SqlTypeMap.ToCs(pkCol.ClrType);
         var pkDefault = DefaultLiteralFor(pkCol.ClrType);
 
         var nonServerGen = entity.Table.Columns.Where(c => !c.IsServerGenerated).ToList();
@@ -92,58 +96,109 @@ public sealed class InfrastructureTestsEmitter : IEmitter
         sb.AppendLine("using Microsoft.EntityFrameworkCore;");
         sb.AppendLine("using Xunit;");
         sb.AppendLine($"using {featureNs};");
-        sb.AppendLine($"using {absNs};");
         sb.AppendLine($"using {infraDataNs};");
         sb.AppendLine($"using {dataEntityNs};");
         sb.AppendLine();
         sb.AppendLine($"namespace {classNs};");
         sb.AppendLine();
-        sb.AppendLine($"public class {e}DataAccessTests");
+        sb.AppendLine($"public class {e}RepositoryTests");
         sb.AppendLine("{");
         sb.AppendLine($"    private static {dbCtx} CreateDb(string? dbName = null) =>");
         sb.AppendLine($"        new {dbCtx}(new DbContextOptionsBuilder<{dbCtx}>()");
         sb.AppendLine($"            .UseInMemoryDatabase(dbName ?? $\"{e}-{{System.Guid.NewGuid()}}\").Options);");
         sb.AppendLine();
 
-        // GetByIdAsync null-path (only if GetById is enabled)
         if ((crud & CrudOperation.GetById) != 0)
         {
             sb.AppendLine("    [Fact]");
-            sb.AppendLine($"    public async Task GetByIdAsync_returns_null_when_missing()");
+            sb.AppendLine("    public async Task GetByIdAsync_returns_null_when_missing()");
             sb.AppendLine("    {");
             sb.AppendLine("        using var db = CreateDb();");
-            sb.AppendLine($"        var sut = new {e}DataAccess(db);");
+            sb.AppendLine($"        var sut = new {e}Repository(db);");
             sb.AppendLine($"        var result = await sut.GetByIdAsync({pkDefault}, default);");
             sb.AppendLine("        Assert.Null(result);");
             sb.AppendLine("    }");
         }
 
-        // CreateAsync persistence test (only if Post is enabled)
         if ((crud & CrudOperation.Post) != 0)
         {
-            var positionalArgs = string.Join(", ", nonServerGen.Select(c => ValidPlaceholder(c)));
+            var positionalArgs = string.Join(", ", nonServerGen.Select(ValidPlaceholder));
 
-            sb.AppendLine();
+            if ((crud & CrudOperation.GetById) != 0) sb.AppendLine();
             sb.AppendLine("    [Fact]");
-            sb.AppendLine($"    public async Task CreateAsync_persists_and_returns_dto()");
+            sb.AppendLine("    public async Task Handler_persists_via_repository_and_uow()");
             sb.AppendLine("    {");
             sb.AppendLine("        using var db = CreateDb();");
-            sb.AppendLine($"        var sut = new {e}DataAccess(db);");
+            sb.AppendLine($"        var repo = new {e}Repository(db);");
+            sb.AppendLine("        var uow = new EfUnitOfWork(db);");
+            sb.AppendLine($"        var handler = new Create{e}Handler(repo, uow);");
             sb.AppendLine($"        var command = new Create{e}Command({positionalArgs});");
-            sb.AppendLine("        var dto = await sut.CreateAsync(command, default);");
+            sb.AppendLine("        var dto = await handler.HandleAsync(command, default);");
             sb.AppendLine("        Assert.NotNull(dto);");
             sb.AppendLine("    }");
         }
 
-        // GetPagedAsync empty-store test (only if GetList is enabled)
-        if ((crud & CrudOperation.GetList) != 0)
+        sb.AppendLine("}");
+
+        return new EmittedFile($"{testsDir}/Data/{plural}/{e}RepositoryTests.cs", sb.ToString());
+    }
+
+    static EmittedFile BuildReadServiceTests(EmitterContext ctx, string testsDir, NamedEntity entity)
+    {
+        var project = ctx.Config.ProjectName;
+        var e       = entity.EntityTypeName;
+        var plural  = entity.DbSetPropertyName;
+        var dbCtx   = $"{project}DbContext";
+        var crud    = ctx.Config.Crud;
+
+        var infraDataNs  = $"{CleanLayout.InfrastructureNamespace(project)}.Data";
+        var dataEntityNs = CleanLayout.InfrastructureDataEntityNamespace(project, e);
+        var classNs      = $"{project}.Infrastructure.Tests.Data.{plural}";
+
+        var pk = entity.Table.PrimaryKey!;
+        var pkColName = pk.ColumnNames[0];
+        var pkCol = entity.Table.Columns.First(c =>
+            string.Equals(c.Name, pkColName, System.StringComparison.OrdinalIgnoreCase));
+        var pkDefault = DefaultLiteralFor(pkCol.ClrType);
+
+        var sb = new StringBuilder();
+        sb.AppendLine("using System.Threading.Tasks;");
+        sb.AppendLine("using Microsoft.EntityFrameworkCore;");
+        sb.AppendLine("using Xunit;");
+        sb.AppendLine($"using {infraDataNs};");
+        sb.AppendLine($"using {dataEntityNs};");
+        sb.AppendLine();
+        sb.AppendLine($"namespace {classNs};");
+        sb.AppendLine();
+        sb.AppendLine($"public class {e}ReadServiceTests");
+        sb.AppendLine("{");
+        sb.AppendLine($"    private static {dbCtx} CreateDb(string? dbName = null) =>");
+        sb.AppendLine($"        new {dbCtx}(new DbContextOptionsBuilder<{dbCtx}>()");
+        sb.AppendLine($"            .UseInMemoryDatabase(dbName ?? $\"{e}-{{System.Guid.NewGuid()}}\").Options);");
+        sb.AppendLine();
+
+        var first = true;
+        if ((crud & CrudOperation.GetById) != 0)
         {
-            sb.AppendLine();
             sb.AppendLine("    [Fact]");
-            sb.AppendLine($"    public async Task GetPagedAsync_returns_empty_on_empty_store()");
+            sb.AppendLine("    public async Task GetByIdAsync_returns_null_when_missing()");
             sb.AppendLine("    {");
             sb.AppendLine("        using var db = CreateDb();");
-            sb.AppendLine($"        var sut = new {e}DataAccess(db);");
+            sb.AppendLine($"        var sut = new {e}ReadService(db);");
+            sb.AppendLine($"        var result = await sut.GetByIdAsync({pkDefault}, default);");
+            sb.AppendLine("        Assert.Null(result);");
+            sb.AppendLine("    }");
+            first = false;
+        }
+
+        if ((crud & CrudOperation.GetList) != 0)
+        {
+            if (!first) sb.AppendLine();
+            sb.AppendLine("    [Fact]");
+            sb.AppendLine("    public async Task GetPagedAsync_returns_empty_on_empty_store()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        using var db = CreateDb();");
+            sb.AppendLine($"        var sut = new {e}ReadService(db);");
             sb.AppendLine("        var (items, total) = await sut.GetPagedAsync(1, 10, default);");
             sb.AppendLine("        Assert.Empty(items);");
             sb.AppendLine("        Assert.Equal(0, total);");
@@ -152,7 +207,7 @@ public sealed class InfrastructureTestsEmitter : IEmitter
 
         sb.AppendLine("}");
 
-        return new EmittedFile($"{testsDir}/Data/{plural}/{e}DataAccessTests.cs", sb.ToString());
+        return new EmittedFile($"{testsDir}/Data/{plural}/{e}ReadServiceTests.cs", sb.ToString());
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

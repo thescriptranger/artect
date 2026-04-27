@@ -2,8 +2,8 @@ namespace {{ Namespace }};
 
 /// <summary>
 /// Reflection-based scalar-only mapper. Copies matching public properties by name.
-/// Used by DataAccess classes for entity → Dto materialization where inline
-/// LINQ projection is overkill (typically GetByIdAsync and CreateAsync).
+/// Used by generated handlers to map a domain entity to its Dto after a successful
+/// repository + UoW commit, where inline LINQ projection is overkill.
 /// </summary>
 public static class DtoMapper
 {

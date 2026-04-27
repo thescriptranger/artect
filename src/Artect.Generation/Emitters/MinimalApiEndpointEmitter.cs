@@ -9,9 +9,9 @@ namespace Artect.Generation.Emitters;
 
 /// <summary>
 /// Emits one &lt;Plural&gt;Endpoints.cs per entity into Api/Endpoints/.
-/// Flat folder — no per-feature subfolder. Endpoints inject I&lt;Entity&gt;Queries /
-/// I&lt;Entity&gt;Commands directly, build Command records inline from Request fields,
-/// and return Results.* helpers. Validation is inline via IValidator&lt;Request&gt;.
+/// Phase 2 shape: read endpoints inject I&lt;Entity&gt;ReadService; write endpoints
+/// inject the per-op &lt;Verb&gt;&lt;Entity&gt;Handler. Endpoints never see
+/// IUnitOfWork — handlers commit. Validation runs inline via IValidator&lt;Request&gt;.
 /// </summary>
 public sealed class MinimalApiEndpointEmitter : IEmitter
 {
@@ -26,9 +26,9 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
             if (entity.IsJoinTable) continue;
             if (!entity.HasPrimaryKey) continue;
 
-            var pluralPascal = Artect.Naming.CasingHelper.ToPascalCase(
-                Artect.Naming.Pluralizer.Pluralize(entity.EntityTypeName), corrections);
-            var routeKebab = Artect.Naming.CasingHelper.ToKebabCase(pluralPascal, corrections);
+            var pluralPascal = CasingHelper.ToPascalCase(
+                Pluralizer.Pluralize(entity.EntityTypeName), corrections);
+            var routeKebab = CasingHelper.ToKebabCase(pluralPascal, corrections);
             list.Add(Build(ctx, entity, pluralPascal, routeKebab));
         }
 
@@ -91,17 +91,17 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         sb.AppendLine();
 
         if ((crud & CrudOperation.GetList) != 0)
-            EmitGetList(sb, name, plural);
+            EmitGetList(sb, name);
         if ((crud & CrudOperation.GetById) != 0)
-            EmitGetById(sb, name, pkProp, pkType, pkRouteConstraint);
+            EmitGetById(sb, name, pkType, pkRouteConstraint);
         if ((crud & CrudOperation.Post) != 0)
             EmitPost(sb, name, route, pkProp, nonServerGenCols, corrections);
         if ((crud & CrudOperation.Put) != 0)
-            EmitPut(sb, name, pkColName, pkProp, pkType, pkRouteConstraint, allCols, corrections, verb: "Put", commandPrefix: "Update");
+            EmitUpdate(sb, name, pkColName, pkProp, pkType, pkRouteConstraint, allCols, corrections, verb: "Put", commandPrefix: "Update");
         if ((crud & CrudOperation.Patch) != 0)
-            EmitPut(sb, name, pkColName, pkProp, pkType, pkRouteConstraint, allCols, corrections, verb: "Patch", commandPrefix: "Patch");
+            EmitUpdate(sb, name, pkColName, pkProp, pkType, pkRouteConstraint, allCols, corrections, verb: "Patch", commandPrefix: "Patch");
         if ((crud & CrudOperation.Delete) != 0)
-            EmitDelete(sb, name, pkProp, pkType, pkRouteConstraint);
+            EmitDelete(sb, name, pkType, pkRouteConstraint);
 
         sb.AppendLine("        return app;");
         sb.AppendLine("    }");
@@ -111,13 +111,13 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         return new EmittedFile(path, sb.ToString());
     }
 
-    static void EmitGetList(StringBuilder sb, string name, string plural)
+    static void EmitGetList(StringBuilder sb, string name)
     {
-        sb.AppendLine($"        group.MapGet(\"/\", async (I{name}Queries queries, CancellationToken ct, int page = 1, int pageSize = 50) =>");
+        sb.AppendLine($"        group.MapGet(\"/\", async (I{name}ReadService reads, CancellationToken ct, int page = 1, int pageSize = 50) =>");
         sb.AppendLine("        {");
         sb.AppendLine("            if (page < 1) { page = 1; }");
         sb.AppendLine("            if (pageSize < 1) { pageSize = 50; }");
-        sb.AppendLine("            var (items, totalCount) = await queries.GetPagedAsync(page, pageSize, ct).ConfigureAwait(false);");
+        sb.AppendLine("            var (items, totalCount) = await reads.GetPagedAsync(page, pageSize, ct).ConfigureAwait(false);");
         sb.AppendLine($"            return Results.Ok(new PagedResponse<{name}Response>");
         sb.AppendLine("            {");
         sb.AppendLine("                Items = items.Select(e => e.ToResponse()).ToList(),");
@@ -129,19 +129,20 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         sb.AppendLine();
     }
 
-    static void EmitGetById(StringBuilder sb, string name, string pkProp, string pkType, string pkRouteConstraint)
+    static void EmitGetById(StringBuilder sb, string name, string pkType, string pkRouteConstraint)
     {
-        sb.AppendLine($"        group.MapGet(\"/{{id{pkRouteConstraint}}}\", async ({pkType} id, I{name}Queries queries, CancellationToken ct) =>");
+        sb.AppendLine($"        group.MapGet(\"/{{id{pkRouteConstraint}}}\", async ({pkType} id, I{name}ReadService reads, CancellationToken ct) =>");
         sb.AppendLine("        {");
-        sb.AppendLine("            var entity = await queries.GetByIdAsync(id, ct).ConfigureAwait(false);");
+        sb.AppendLine("            var entity = await reads.GetByIdAsync(id, ct).ConfigureAwait(false);");
         sb.AppendLine("            return entity is null ? Results.NotFound() : Results.Ok(entity.ToResponse());");
         sb.AppendLine("        });");
         sb.AppendLine();
     }
 
-    static void EmitPost(StringBuilder sb, string name, string route, string pkProp, IReadOnlyList<Column> nonServerGenCols, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
+    static void EmitPost(StringBuilder sb, string name, string route, string pkProp,
+        IReadOnlyList<Column> nonServerGenCols, IReadOnlyDictionary<string, string> corrections)
     {
-        sb.AppendLine($"        group.MapPost(\"/\", async (Create{name}Request request, I{name}Commands commands, IValidator<Create{name}Request> validator, CancellationToken ct) =>");
+        sb.AppendLine($"        group.MapPost(\"/\", async (Create{name}Request request, Create{name}Handler handler, IValidator<Create{name}Request> validator, CancellationToken ct) =>");
         sb.AppendLine("        {");
         sb.AppendLine("            var validation = validator.Validate(request);");
         sb.AppendLine("            if (!validation.IsValid) { return validation.ToBadRequest(); }");
@@ -155,21 +156,22 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
             sb.AppendLine($"                request.{prop}{terminator}");
         }
         sb.AppendLine();
-        sb.AppendLine("            var entity = await commands.CreateAsync(command, ct).ConfigureAwait(false);");
+        sb.AppendLine("            var entity = await handler.HandleAsync(command, ct).ConfigureAwait(false);");
         sb.AppendLine($"            return Results.Created($\"/api/{route}/{{entity.{pkProp}}}\", entity.ToResponse());");
         sb.AppendLine("        });");
         sb.AppendLine();
     }
 
-    static void EmitPut(StringBuilder sb, string name, string pkColName, string pkProp, string pkType, string pkRouteConstraint,
-        IReadOnlyList<Column> allCols, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections,
+    static void EmitUpdate(StringBuilder sb, string name, string pkColName, string pkProp, string pkType, string pkRouteConstraint,
+        IReadOnlyList<Column> allCols, IReadOnlyDictionary<string, string> corrections,
         string verb, string commandPrefix)
     {
         var commandType = $"{commandPrefix}{name}Command";
+        var handlerType = $"{commandPrefix}{name}Handler";
         var requestType = $"Update{name}Request"; // Same Request type for Put and Patch
         var mapVerb = verb == "Put" ? "MapPut" : "MapPatch";
 
-        sb.AppendLine($"        group.{mapVerb}(\"/{{id{pkRouteConstraint}}}\", async ({pkType} id, {requestType} request, I{name}Commands commands, IValidator<{requestType}> validator, CancellationToken ct) =>");
+        sb.AppendLine($"        group.{mapVerb}(\"/{{id{pkRouteConstraint}}}\", async ({pkType} id, {requestType} request, {handlerType} handler, IValidator<{requestType}> validator, CancellationToken ct) =>");
         sb.AppendLine("        {");
         sb.AppendLine("            var validation = validator.Validate(request);");
         sb.AppendLine("            if (!validation.IsValid) { return validation.ToBadRequest(); }");
@@ -184,17 +186,17 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
             sb.AppendLine($"                {value}{terminator}");
         }
         sb.AppendLine();
-        sb.AppendLine("            var entity = await commands." + (verb == "Put" ? "UpdateAsync" : "PatchAsync") + "(command, ct).ConfigureAwait(false);");
+        sb.AppendLine("            var entity = await handler.HandleAsync(command, ct).ConfigureAwait(false);");
         sb.AppendLine("            return entity is null ? Results.NotFound() : Results.Ok(entity.ToResponse());");
         sb.AppendLine("        });");
         sb.AppendLine();
     }
 
-    static void EmitDelete(StringBuilder sb, string name, string pkProp, string pkType, string pkRouteConstraint)
+    static void EmitDelete(StringBuilder sb, string name, string pkType, string pkRouteConstraint)
     {
-        sb.AppendLine($"        group.MapDelete(\"/{{id{pkRouteConstraint}}}\", async ({pkType} id, I{name}Commands commands, CancellationToken ct) =>");
+        sb.AppendLine($"        group.MapDelete(\"/{{id{pkRouteConstraint}}}\", async ({pkType} id, Delete{name}Handler handler, CancellationToken ct) =>");
         sb.AppendLine("        {");
-        sb.AppendLine("            var deleted = await commands.DeleteAsync(id, ct).ConfigureAwait(false);");
+        sb.AppendLine("            var deleted = await handler.HandleAsync(id, ct).ConfigureAwait(false);");
         sb.AppendLine("            return deleted ? Results.NoContent() : Results.NotFound();");
         sb.AppendLine("        });");
         sb.AppendLine();

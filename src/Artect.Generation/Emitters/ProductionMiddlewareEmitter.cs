@@ -17,21 +17,23 @@ public sealed class ProductionMiddlewareEmitter : IEmitter
         var project = ctx.Config.ProjectName;
         var ns = $"{project}.Api.Middleware";
         var dir = $"{CleanLayout.ApiDir(project)}/Middleware";
+        var domainCommonNs = CleanLayout.DomainCommonNamespace(project);
 
         return new[]
         {
-            new EmittedFile($"{dir}/GlobalExceptionHandler.cs", BuildGlobalExceptionHandler(ns)),
+            new EmittedFile($"{dir}/GlobalExceptionHandler.cs", BuildGlobalExceptionHandler(ns, domainCommonNs)),
             new EmittedFile($"{dir}/CorrelationIdMiddleware.cs", BuildCorrelationIdMiddleware(ns)),
         };
     }
 
-    static string BuildGlobalExceptionHandler(string ns)
+    static string BuildGlobalExceptionHandler(string ns, string domainCommonNs)
     {
         var sb = new StringBuilder();
         sb.AppendLine("using Microsoft.AspNetCore.Diagnostics;");
         sb.AppendLine("using Microsoft.AspNetCore.Http;");
         sb.AppendLine("using Microsoft.AspNetCore.Mvc;");
         sb.AppendLine("using Microsoft.Extensions.Logging;");
+        sb.AppendLine($"using {domainCommonNs};");
         sb.AppendLine();
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
@@ -39,6 +41,25 @@ public sealed class ProductionMiddlewareEmitter : IEmitter
         sb.AppendLine("{");
         sb.AppendLine("    public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)");
         sb.AppendLine("    {");
+        sb.AppendLine("        if (exception is DomainValidationException dve)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var validation = new ValidationProblemDetails");
+        sb.AppendLine("            {");
+        sb.AppendLine("                Status = StatusCodes.Status400BadRequest,");
+        sb.AppendLine("                Title  = \"Domain validation failed.\",");
+        sb.AppendLine("                Type   = \"https://datatracker.ietf.org/doc/html/rfc7231#section-6.5.1\",");
+        sb.AppendLine("                Instance = httpContext.Request.Path,");
+        sb.AppendLine("            };");
+        sb.AppendLine("            foreach (var group in dve.Errors.GroupBy(e => e.PropertyName))");
+        sb.AppendLine("            {");
+        sb.AppendLine("                validation.Errors[group.Key] = group.Select(e => e.Message).ToArray();");
+        sb.AppendLine("            }");
+        sb.AppendLine("            validation.Extensions[\"traceId\"] = httpContext.TraceIdentifier;");
+        sb.AppendLine("            httpContext.Response.StatusCode = validation.Status.Value;");
+        sb.AppendLine("            await httpContext.Response.WriteAsJsonAsync(validation, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            return true;");
+        sb.AppendLine("        }");
+        sb.AppendLine();
         sb.AppendLine("        logger.LogError(exception, \"Unhandled exception for {TraceId}\", httpContext.TraceIdentifier);");
         sb.AppendLine();
         sb.AppendLine("        var problem = new ProblemDetails");
