@@ -50,7 +50,7 @@ public sealed class ProductionMiddlewareEmitter : IEmitter
         sb.AppendLine("                Type   = \"https://datatracker.ietf.org/doc/html/rfc7231#section-6.5.1\",");
         sb.AppendLine("                Instance = httpContext.Request.Path,");
         sb.AppendLine("            };");
-        sb.AppendLine("            foreach (var group in dve.Errors.GroupBy(e => e.PropertyName))");
+        sb.AppendLine("            foreach (var group in dve.Errors.GroupBy(e => e.Field))");
         sb.AppendLine("            {");
         sb.AppendLine("                validation.Errors[group.Key] = group.Select(e => e.Message).ToArray();");
         sb.AppendLine("            }");
