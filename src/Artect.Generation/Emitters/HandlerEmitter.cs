@@ -13,9 +13,26 @@ namespace Artect.Generation.Emitters;
 /// and IUnitOfWork, runs the operation, and commits exactly once. Handlers are
 /// sealed partial classes so the user adds business logic via OnBefore/OnAfter
 /// hooks in a sibling .Hooks.cs file without touching generated code.
+///
+/// V#6: Create/Update/Patch handlers implement
+/// <c>ICommandHandler&lt;TCommand, TResult&gt;</c> from
+/// <c>&lt;Project&gt;.Application.Abstractions</c> so cross-cutting decorators
+/// (validation, transaction, audit, authorization) can wrap them uniformly.
+/// Delete is currently exempt — its signature takes a primitive id, not a
+/// command record; V#16 will refactor.
 /// </summary>
 public sealed class HandlerEmitter : IEmitter
 {
+    /// <summary>
+    /// V#6 acceptance #2: every generated CRUD handler carries this header so it is
+    /// visibly a schema-derived scaffold rather than a real domain use case. Real use
+    /// cases live in <c>Application/UseCases/</c> and implement the same abstractions.
+    /// </summary>
+    const string ScaffoldBaselineComment =
+        "// Scaffolded CRUD baseline — generated from schema. Real business workflows" +
+        "\n// belong in <Project>.Application.UseCases/ implementing the same" +
+        "\n// ICommandHandler<,> / IQueryHandler<,> abstractions.";
+
     public IReadOnlyList<EmittedFile> Emit(EmitterContext ctx)
     {
         var crud = ctx.Config.Crud;
@@ -71,7 +88,9 @@ public sealed class HandlerEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
+        sb.AppendLine(ScaffoldBaselineComment);
         sb.AppendLine($"public sealed partial class Create{name}Handler(I{name}Repository repository, IUnitOfWork unitOfWork)");
+        sb.AppendLine($"    : ICommandHandler<Create{name}Command, {name}Dto>");
         sb.AppendLine("{");
         sb.AppendLine($"    public async Task<{name}Dto> HandleAsync(Create{name}Command command, CancellationToken ct)");
         sb.AppendLine("    {");
@@ -146,7 +165,9 @@ public sealed class HandlerEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
+        sb.AppendLine(ScaffoldBaselineComment);
         sb.AppendLine($"public sealed partial class {handlerName}(I{name}Repository repository, IUnitOfWork unitOfWork)");
+        sb.AppendLine($"    : ICommandHandler<{commandType}, {name}Dto?>");
         sb.AppendLine("{");
         sb.AppendLine($"    public async Task<{name}Dto?> HandleAsync({commandType} command, CancellationToken ct)");
         sb.AppendLine("    {");
@@ -226,7 +247,9 @@ public sealed class HandlerEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
+        sb.AppendLine(ScaffoldBaselineComment);
         sb.AppendLine($"public sealed partial class {handlerName}(I{name}Repository repository, IUnitOfWork unitOfWork)");
+        sb.AppendLine($"    : ICommandHandler<{commandType}, {name}Dto?>");
         sb.AppendLine("{");
         sb.AppendLine($"    public async Task<{name}Dto?> HandleAsync({commandType} command, CancellationToken ct)");
         sb.AppendLine("    {");
@@ -294,6 +317,10 @@ public sealed class HandlerEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
+        sb.AppendLine(ScaffoldBaselineComment);
+        sb.AppendLine("// V#6 note: Delete takes a primitive id rather than a command record, so it does");
+        sb.AppendLine("// not implement ICommandHandler<TCmd, TResult>. V#16 (emitter SRP/OCP refactor)");
+        sb.AppendLine("// will introduce DeleteXxxCommand records and migrate this handler to the abstraction.");
         sb.AppendLine($"public sealed partial class {handlerName}(I{name}Repository repository, IUnitOfWork unitOfWork)");
         sb.AppendLine("{");
         sb.AppendLine($"    public async Task<bool> HandleAsync({pkType} id, CancellationToken ct)");

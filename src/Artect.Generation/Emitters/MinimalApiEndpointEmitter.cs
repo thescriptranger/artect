@@ -82,6 +82,10 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine($"namespace {endpointNs};");
         sb.AppendLine();
+        sb.AppendLine("// V#6 scaffolded CRUD baseline — generated from schema. Real business workflows");
+        sb.AppendLine("// belong in their own endpoint files (or behind a different route prefix) and");
+        sb.AppendLine("// should call ICommandHandler<,> / IQueryHandler<,> from " + project + ".Application.Abstractions");
+        sb.AppendLine("// rather than the per-aggregate concrete handlers below.");
         sb.AppendLine($"public static partial class {plural}Endpoints");
         sb.AppendLine("{");
         sb.AppendLine($"    public static IEndpointRouteBuilder Map{plural}Endpoints(this IEndpointRouteBuilder app)");
