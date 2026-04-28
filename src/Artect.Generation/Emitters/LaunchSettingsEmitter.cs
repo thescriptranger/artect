@@ -14,14 +14,21 @@ public sealed class LaunchSettingsEmitter : IEmitter
         var project = ctx.Config.ProjectName;
         var name    = CleanLayout.ApiProjectName(project);
 
+        // Scalar is the default landing page for the http / https profiles when enabled,
+        // so `dotnet run` (or F5) opens directly to the API explorer. When disabled, we
+        // drop launchUrl so the browser opens to the application root instead of 404-ing
+        // on /scalar/v1.
+        var launchUrlLine = ctx.Config.EnableScalarUi
+            ? "\n          \"launchUrl\": \"scalar/v1\","
+            : string.Empty;
+
         var content = $$"""
             {
               "$schema": "https://json.schemastore.org/launchsettings.json",
               "profiles": {
                 "https": {
                   "commandName": "Project",
-                  "launchBrowser": true,
-                  "launchUrl": "scalar/v1",
+                  "launchBrowser": true,{{launchUrlLine}}
                   "applicationUrl": "https://localhost:5443;http://localhost:5080",
                   "environmentVariables": {
                     "DOTNET_ENVIRONMENT": "Development"
@@ -29,8 +36,7 @@ public sealed class LaunchSettingsEmitter : IEmitter
                 },
                 "http": {
                   "commandName": "Project",
-                  "launchBrowser": true,
-                  "launchUrl": "scalar/v1",
+                  "launchBrowser": true,{{launchUrlLine}}
                   "applicationUrl": "http://localhost:5080",
                   "environmentVariables": {
                     "DOTNET_ENVIRONMENT": "Development"

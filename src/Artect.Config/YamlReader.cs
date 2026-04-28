@@ -30,7 +30,7 @@ public static class YamlReader
             "projectName","outputDirectory","targetFramework","dataAccess","emitRepositoriesAndAbstractions",
             "generatedByLabel","generateInitialMigration","crud","apiVersioning","auth",
             "includeTestsProject","includeDockerAssets","partitionStoredProceduresBySchema",
-            "includeChildCollectionsInResponses","validateForeignKeyReferences","maxPageSize","enableDomainEvents","schemas","connectionString",
+            "includeChildCollectionsInResponses","validateForeignKeyReferences","maxPageSize","enableDomainEvents","enableScalarUi","schemas","connectionString",
             "namingCorrections","tableClassifications","columnMetadata"
         };
 
@@ -66,6 +66,7 @@ public static class YamlReader
             ValidateForeignKeyReferences: ParseBool(root, "validateForeignKeyReferences"),
             MaxPageSize: ParseOptionalPositiveInt(root, "maxPageSize", 100),
             EnableDomainEvents: TryGetScalar(root, "enableDomainEvents") is { } edeNode ? ParseBoolNode(edeNode, "enableDomainEvents") : false,
+            EnableScalarUi: TryGetScalar(root, "enableScalarUi") is { } esNode ? ParseBoolNode(esNode, "enableScalarUi") : true,
             Schemas: ParseScalarList(root, "schemas"),
             NamingCorrections: ParseScalarMap(root, "namingCorrections"),
             TableClassifications: ParseClassifications(root),

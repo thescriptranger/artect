@@ -43,6 +43,8 @@ public sealed class ProgramCsEmitter : IEmitter
         var versioningEnabled = versioning != ApiVersioningKind.None;
         var versioningTemplateContent = versioningEnabled ? LoadVersioningTemplate(ctx, versioning) : null;
 
+        var scalarEnabled = ctx.Config.EnableScalarUi;
+
         var sb = new StringBuilder();
         sb.AppendLine($"using {project}.Api;");
         sb.AppendLine($"using {project}.Api.Configuration;");
@@ -54,7 +56,8 @@ public sealed class ProgramCsEmitter : IEmitter
         sb.AppendLine($"using {project}.Application;");
         sb.AppendLine($"using {project}.Infrastructure;");
         sb.AppendLine("using Microsoft.AspNetCore.HttpLogging;");
-        sb.AppendLine("using Scalar.AspNetCore;");
+        if (scalarEnabled)
+            sb.AppendLine("using Scalar.AspNetCore;");
         sb.AppendLine();
         sb.AppendLine("var builder = WebApplication.CreateBuilder(args);");
         sb.AppendLine();
@@ -114,7 +117,8 @@ public sealed class ProgramCsEmitter : IEmitter
         sb.AppendLine("if (app.Environment.IsDevelopment())");
         sb.AppendLine("{");
         sb.AppendLine("    app.MapOpenApi();");
-        sb.AppendLine("    app.MapScalarApiReference();");
+        if (scalarEnabled)
+            sb.AppendLine("    app.MapScalarApiReference();");
         sb.AppendLine("}");
         sb.AppendLine();
         sb.AppendLine("app.UseHttpsRedirection();");

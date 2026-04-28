@@ -62,7 +62,8 @@ public sealed class CsProjEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine("  <ItemGroup>");
         sb.AppendLine(PackageRef("Microsoft.AspNetCore.OpenApi", $"{major}.0.*"));
-        sb.AppendLine(PackageRef("Scalar.AspNetCore", "2.*"));
+        if (cfg.EnableScalarUi)
+            sb.AppendLine(PackageRef("Scalar.AspNetCore", "2.*"));
 
         if (cfg.Auth == AuthKind.JwtBearer)
             sb.AppendLine(PackageRef("Microsoft.AspNetCore.Authentication.JwtBearer", $"{major}.0.*"));

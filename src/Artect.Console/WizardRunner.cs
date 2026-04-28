@@ -42,6 +42,7 @@ public sealed class WizardRunner
         var partition = _prompt.AskBool("13. Partition stored-procedure interfaces by schema (Advanced)", defaults.PartitionStoredProceduresBySchema);
         var childCollections = _prompt.AskBool("14. Include one-to-many child collections in responses (Advanced)", defaults.IncludeChildCollectionsInResponses);
         var schemas = _prompt.AskMultiString("15. Schemas to include", availableSchemas, new[] { "dbo" });
+        var scalar = _prompt.AskBool("16. Enable Scalar UI for browsing the API in development", defaults.EnableScalarUi);
 
         return defaults with
         {
@@ -60,6 +61,7 @@ public sealed class WizardRunner
             PartitionStoredProceduresBySchema = partition,
             IncludeChildCollectionsInResponses = childCollections,
             Schemas = schemas,
+            EnableScalarUi = scalar,
         };
     }
 
