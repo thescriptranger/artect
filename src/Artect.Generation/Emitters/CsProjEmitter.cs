@@ -72,6 +72,18 @@ public sealed class CsProjEmitter : IEmitter
         if (cfg.ApiVersioning != ApiVersioningKind.None)
             sb.AppendLine(PackageRef("Asp.Versioning.Http", "8.*"));
 
+        // V#18: secure-by-default production middleware. Health-checks EFCore is needed
+        // for the readiness probe; OpenTelemetry packages enable traces, metrics, logs
+        // with the OTLP exporter. Versions floated to 1.* / latest minor — these are the
+        // shipped-stable lines as of the OTel 1.10 wave.
+        if (cfg.DataAccess == DataAccessKind.EfCore)
+            sb.AppendLine(PackageRef("Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore", $"{major}.0.*"));
+        sb.AppendLine(PackageRef("OpenTelemetry.Extensions.Hosting", "1.*"));
+        sb.AppendLine(PackageRef("OpenTelemetry.Instrumentation.AspNetCore", "1.*"));
+        sb.AppendLine(PackageRef("OpenTelemetry.Instrumentation.Http", "1.*"));
+        sb.AppendLine(PackageRef("OpenTelemetry.Instrumentation.Runtime", "1.*"));
+        sb.AppendLine(PackageRef("OpenTelemetry.Exporter.OpenTelemetryProtocol", "1.*"));
+
         sb.AppendLine("  </ItemGroup>");
         sb.AppendLine();
         sb.AppendLine("  <ItemGroup>");

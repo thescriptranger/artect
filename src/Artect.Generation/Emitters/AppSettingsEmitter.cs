@@ -31,7 +31,19 @@ public sealed class AppSettingsEmitter : IEmitter
                   "Microsoft.AspNetCore": "Warning"
                 }
               },
-              "AllowedHosts": "*"
+              "AllowedHosts": "*",
+              "Cors": {
+                "AllowedOrigins": []
+              },
+              "RateLimiting": {
+                "Enabled": true,
+                "PermitLimit": 100,
+                "WindowSeconds": 60
+              },
+              "OpenTelemetry": {
+                "ServiceName": "",
+                "OtlpEndpoint": ""
+              }
             }
             """;
 

@@ -45,6 +45,7 @@ public sealed class ProgramCsEmitter : IEmitter
 
         var sb = new StringBuilder();
         sb.AppendLine($"using {project}.Api;");
+        sb.AppendLine($"using {project}.Api.Configuration;");
         sb.AppendLine($"using {project}.Api.Middleware;");
         if (authEnabled)
             sb.AppendLine($"using {project}.Api.OpenApi;");
@@ -52,6 +53,7 @@ public sealed class ProgramCsEmitter : IEmitter
             sb.AppendLine($"using {project}.Api.Auth;");
         sb.AppendLine($"using {project}.Application;");
         sb.AppendLine($"using {project}.Infrastructure;");
+        sb.AppendLine("using Microsoft.AspNetCore.HttpLogging;");
         sb.AppendLine("using Scalar.AspNetCore;");
         sb.AppendLine();
         sb.AppendLine("var builder = WebApplication.CreateBuilder(args);");
@@ -69,7 +71,18 @@ public sealed class ProgramCsEmitter : IEmitter
         }
         sb.AppendLine("builder.Services.AddProblemDetails();");
         sb.AppendLine("builder.Services.AddExceptionHandler<GlobalExceptionHandler>();");
-        sb.AppendLine("builder.Services.AddHealthChecks();");
+        sb.AppendLine();
+        sb.AppendLine("// V#18: secure-by-default production middleware. Each helper reads its");
+        sb.AppendLine("// configuration block from appsettings; defaults are safe for production.");
+        sb.AppendLine("builder.Services.AddDefaultCorsPolicy(builder.Configuration);");
+        sb.AppendLine("builder.Services.AddDefaultRateLimiting(builder.Configuration);");
+        sb.AppendLine("builder.Services.AddDefaultHealthChecks();");
+        sb.AppendLine("builder.Services.AddDefaultOpenTelemetry(builder.Configuration, builder.Environment);");
+        sb.AppendLine("builder.Services.AddHttpLogging(o =>");
+        sb.AppendLine("{");
+        sb.AppendLine("    o.LoggingFields = HttpLoggingFields.RequestPropertiesAndHeaders | HttpLoggingFields.ResponseStatusCode;");
+        sb.AppendLine("});");
+        sb.AppendLine("builder.Services.AddHttpLoggingInterceptor<SensitiveDataLoggingInterceptor>();");
         if (authEnabled)
         {
             sb.AppendLine();
@@ -96,6 +109,7 @@ public sealed class ProgramCsEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine("app.UseExceptionHandler();");
         sb.AppendLine("app.UseMiddleware<CorrelationIdMiddleware>();");
+        sb.AppendLine("app.UseHttpLogging();");
         sb.AppendLine();
         sb.AppendLine("if (app.Environment.IsDevelopment())");
         sb.AppendLine("{");
@@ -104,13 +118,17 @@ public sealed class ProgramCsEmitter : IEmitter
         sb.AppendLine("}");
         sb.AppendLine();
         sb.AppendLine("app.UseHttpsRedirection();");
+        sb.AppendLine("// V#18: security headers run before auth so 401/403 responses still carry HSTS / CSP / etc.");
+        sb.AppendLine("app.UseSecurityHeaders();");
+        sb.AppendLine($"app.UseCors(CorsServiceCollectionExtensions.PolicyName);");
+        sb.AppendLine("app.UseRateLimiter();");
         if (authEnabled)
         {
             // V#9 acceptance #1: UseAuthentication MUST come before UseAuthorization.
             sb.AppendLine("app.UseAuthentication();");
             sb.AppendLine("app.UseAuthorization();");
         }
-        sb.AppendLine("app.MapHealthChecks(\"/health\");");
+        sb.AppendLine("app.MapDefaultHealthEndpoints();");
         if (versioningEnabled)
         {
             sb.AppendLine();
