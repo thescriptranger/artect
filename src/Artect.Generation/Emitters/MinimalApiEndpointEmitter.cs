@@ -41,6 +41,19 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         var name    = entity.EntityTypeName;
         var corrections = ctx.NamingCorrections;
         var authEnabled = ctx.Config.Auth != AuthKind.None;
+        var versioning  = ctx.Config.ApiVersioning;
+        var versioningEnabled = versioning != ApiVersioningKind.None;
+        // V#10: UrlSegment versioning embeds the version in the route. Header /
+        // QueryString strategies use the same /api/<plural> path and resolve the
+        // version from headers / query parameters instead.
+        var groupRoute = versioning == ApiVersioningKind.UrlSegment
+            ? $"/api/v{{apiVersion:apiVersion}}/{route}"
+            : $"/api/{route}";
+        // The Created Location header on POST needs a CONCRETE URL — substitute v1 for
+        // the route constraint so consumers can GET back the freshly-created resource.
+        var createdLocationPrefix = versioning == ApiVersioningKind.UrlSegment
+            ? $"/api/v1/{route}"
+            : $"/api/{route}";
 
         var pk = entity.Table.PrimaryKey!;
         var pkColName = pk.ColumnNames[0];
@@ -79,6 +92,8 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
             sb.AppendLine($"using {filtersNs};");
         sb.AppendLine($"using {reqNs};");
         sb.AppendLine($"using {respNs};");
+        if (versioningEnabled)
+            sb.AppendLine("using Asp.Versioning.Builder;");
         sb.AppendLine("using Microsoft.AspNetCore.Builder;");
         sb.AppendLine("using Microsoft.AspNetCore.Http;");
         sb.AppendLine("using Microsoft.AspNetCore.Routing;");
@@ -91,13 +106,20 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         sb.AppendLine("// rather than the per-aggregate concrete handlers below.");
         sb.AppendLine($"public static partial class {plural}Endpoints");
         sb.AppendLine("{");
-        sb.AppendLine($"    public static IEndpointRouteBuilder Map{plural}Endpoints(this IEndpointRouteBuilder app)");
+        if (versioningEnabled)
+            sb.AppendLine($"    public static IEndpointRouteBuilder Map{plural}Endpoints(this IEndpointRouteBuilder app, ApiVersionSet versionSet)");
+        else
+            sb.AppendLine($"    public static IEndpointRouteBuilder Map{plural}Endpoints(this IEndpointRouteBuilder app)");
         sb.AppendLine("    {");
         // V#9: when auth is configured, every endpoint in this group requires
         // authentication. Per-endpoint policies/scopes can be added via additional
         // .RequireAuthorization("policy") calls on individual MapXxx returns.
-        var groupSuffix = authEnabled ? ".RequireAuthorization()" : string.Empty;
-        sb.AppendLine($"        var group = app.MapGroup(\"/api/{route}\"){groupSuffix};");
+        // V#10: when versioning is configured, every endpoint in this group registers
+        // against the shared version set at v1. Hand-write a separate group for V2.
+        var groupChain = string.Empty;
+        if (authEnabled) groupChain += ".RequireAuthorization()";
+        if (versioningEnabled) groupChain += ".WithApiVersionSet(versionSet).HasApiVersion(new Asp.Versioning.ApiVersion(1, 0))";
+        sb.AppendLine($"        var group = app.MapGroup(\"{groupRoute}\"){groupChain};");
         sb.AppendLine();
 
         if ((crud & CrudOperation.GetList) != 0)
@@ -107,7 +129,7 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         // V#8: lambdas now delegate. Validation runs in ValidationFilter<TRequest>;
         // request→command translation lives in <Entity>Mappings.ToCommand(...).
         if ((crud & CrudOperation.Post) != 0)
-            EmitPost(sb, name, route, pkProp);
+            EmitPost(sb, name, createdLocationPrefix, pkProp);
         if ((crud & CrudOperation.Put) != 0)
             EmitUpdate(sb, name, pkType, pkRouteConstraint);
         // V#5: PATCH uses dedicated PatchXxxRequest (Optional<T?> fields) and PatchXxxHandler.
@@ -156,13 +178,15 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
     /// <summary>
     /// V#8: thin POST endpoint. Validation runs in <c>ValidationFilter&lt;TRequest&gt;</c>;
     /// request→command translation lives in <c>&lt;Entity&gt;Mappings.ToCommand()</c>.
+    /// V#10: <paramref name="locationPrefix"/> is the concrete URL prefix used in the
+    /// Created Location header — for UrlSegment versioning it embeds <c>/v1</c>.
     /// </summary>
-    static void EmitPost(StringBuilder sb, string name, string route, string pkProp)
+    static void EmitPost(StringBuilder sb, string name, string locationPrefix, string pkProp)
     {
         sb.AppendLine($"        group.MapPost(\"/\", async (Create{name}Request request, Create{name}Handler handler, CancellationToken ct) =>");
         sb.AppendLine("        {");
         sb.AppendLine("            var entity = await handler.HandleAsync(request.ToCommand(), ct).ConfigureAwait(false);");
-        sb.AppendLine($"            return Results.Created($\"/api/{route}/{{entity.{pkProp}}}\", entity.ToResponse());");
+        sb.AppendLine($"            return Results.Created($\"{locationPrefix}/{{entity.{pkProp}}}\", entity.ToResponse());");
         sb.AppendLine("        })");
         sb.AppendLine($"        .AddEndpointFilter<ValidationFilter<Create{name}Request>>();");
         sb.AppendLine();

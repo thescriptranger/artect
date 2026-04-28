@@ -47,6 +47,11 @@ public sealed class ApiTestsEmitter : IEmitter
 
             var plural = entity.DbSetPropertyName;
             var route = CasingHelper.ToKebabCase(plural, ctx.NamingCorrections);
+            // V#10: tests target a CONCRETE version when UrlSegment versioning is used.
+            // Header / QueryString strategies leave the URL alone — the test client
+            // can omit the version header/query and rely on AssumeDefaultVersion.
+            if (ctx.Config.ApiVersioning == ApiVersioningKind.UrlSegment)
+                route = $"v1/{route}";
 
             list.Add(new EmittedFile(
                 $"{testsDir}/Endpoints/{plural}EndpointsTests.cs",

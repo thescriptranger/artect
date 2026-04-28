@@ -9,6 +9,9 @@ namespace {{ Namespace }};
 public sealed record {{ Kind }}{{ EntityName }}Request
 {
 {{# for prop in Properties }}
+{{# if prop.IsDeprecated }}
+    [System.Obsolete("Deprecated; do not use in new code.")]
+{{/if}}
     public {{ prop.ClrTypeWithNullability }} {{ prop.PropertyName }} { get; init; }{{ prop.Initializer }}
 {{/for}}
 }

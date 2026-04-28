@@ -61,6 +61,18 @@ public sealed class EntityMappingsEmitter : IEmitter
             sb.AppendLine();
             sb.AppendLine($"public static class {name}Mappings");
             sb.AppendLine("{");
+            // V#10: ToResponse copies every visible column including columns flagged
+            // ColumnMetadata.Deprecated. The deprecated property carries [Obsolete],
+            // which makes the assignment trigger CS0618 under TreatWarningsAsErrors=true.
+            // Suppress around the method body — this is the one place where copying the
+            // deprecated value is intentional (backward-compat).
+            var hasDeprecatedVisible = visibleColumns
+                .Any(c => entity.ColumnHasFlag(c.Name, ColumnMetadata.Deprecated));
+            if (hasDeprecatedVisible)
+            {
+                sb.AppendLine("    #pragma warning disable CS0612 // intentional copy of obsolete member for backward-compat");
+                sb.AppendLine("    #pragma warning disable CS0618 // intentional copy of obsolete member for backward-compat");
+            }
             sb.AppendLine($"    public static {name}Response ToResponse(this {name}Dto dto) =>");
             sb.AppendLine("        new()");
             sb.AppendLine("        {");
@@ -77,6 +89,11 @@ public sealed class EntityMappingsEmitter : IEmitter
                 }
             }
             sb.AppendLine("        };");
+            if (hasDeprecatedVisible)
+            {
+                sb.AppendLine("    #pragma warning restore CS0618");
+                sb.AppendLine("    #pragma warning restore CS0612");
+            }
 
             if (emitCommandMappings)
             {
@@ -96,11 +113,17 @@ public sealed class EntityMappingsEmitter : IEmitter
     /// V#8: emits Request.ToCommand() extension methods. Endpoints call these instead of
     /// inlining the positional record construction. Mirror the command shapes produced by
     /// CommandRecordsEmitter (Create = nonServerGen; Update/Patch = PK + UpdateableColumns).
+    /// V#10: when any request property carries [Obsolete] (ColumnMetadata.Deprecated),
+    /// wrap the mapping in a CS0618/CS0612 pragma so the intentional read of the
+    /// deprecated property doesn't break TreatWarningsAsErrors=true.
     /// </summary>
     static void EmitRequestToCommandMappings(StringBuilder sb, NamedEntity entity, string name, CrudOperation crud, IReadOnlyDictionary<string, string> corrections)
     {
         var pkCols = entity.Table.PrimaryKey!.ColumnNames
             .ToHashSet(System.StringComparer.OrdinalIgnoreCase);
+        var anyDeprecated = entity.Table.Columns
+            .Any(c => entity.ColumnHasFlag(c.Name, ColumnMetadata.Deprecated)
+                   && !entity.ColumnHasFlag(c.Name, ColumnMetadata.Ignored));
 
         if ((crud & CrudOperation.Post) != 0)
         {
@@ -109,6 +132,11 @@ public sealed class EntityMappingsEmitter : IEmitter
                 .Where(c => !c.IsServerGenerated)
                 .ToList();
             sb.AppendLine();
+            if (anyDeprecated)
+            {
+                sb.AppendLine("    #pragma warning disable CS0612 // intentional read of obsolete request member");
+                sb.AppendLine("    #pragma warning disable CS0618 // intentional read of obsolete request member");
+            }
             sb.AppendLine($"    public static Create{name}Command ToCommand(this Create{name}Request request) =>");
             sb.AppendLine("        new(");
             for (int i = 0; i < nonServerGen.Count; i++)
@@ -118,16 +146,21 @@ public sealed class EntityMappingsEmitter : IEmitter
                 var terminator = i == nonServerGen.Count - 1 ? ");" : ",";
                 sb.AppendLine($"            request.{prop}{terminator}");
             }
+            if (anyDeprecated)
+            {
+                sb.AppendLine("    #pragma warning restore CS0618");
+                sb.AppendLine("    #pragma warning restore CS0612");
+            }
         }
 
         // V#3 Update + V#5 Patch share the "PK + UpdateableColumns" shape.
         if ((crud & CrudOperation.Put) != 0)
-            EmitUpdateLikeMapping(sb, entity, name, "Update", corrections, pkCols);
+            EmitUpdateLikeMapping(sb, entity, name, "Update", corrections, pkCols, anyDeprecated);
         if ((crud & CrudOperation.Patch) != 0)
-            EmitUpdateLikeMapping(sb, entity, name, "Patch", corrections, pkCols);
+            EmitUpdateLikeMapping(sb, entity, name, "Patch", corrections, pkCols, anyDeprecated);
     }
 
-    static void EmitUpdateLikeMapping(StringBuilder sb, NamedEntity entity, string name, string verb, IReadOnlyDictionary<string, string> corrections, System.Collections.Generic.HashSet<string> pkCols)
+    static void EmitUpdateLikeMapping(StringBuilder sb, NamedEntity entity, string name, string verb, IReadOnlyDictionary<string, string> corrections, System.Collections.Generic.HashSet<string> pkCols, bool anyDeprecated)
     {
         // PK type for the route id parameter. We only support single-column PKs in
         // endpoints today (URL pattern "/{id}"); composite-key entities won't have an
@@ -146,6 +179,11 @@ public sealed class EntityMappingsEmitter : IEmitter
         var commandCols = pkColumnsList.Concat(entity.UpdateableColumns()).ToList();
 
         sb.AppendLine();
+        if (anyDeprecated)
+        {
+            sb.AppendLine("    #pragma warning disable CS0612 // intentional read of obsolete request member");
+            sb.AppendLine("    #pragma warning disable CS0618 // intentional read of obsolete request member");
+        }
         sb.AppendLine($"    public static {verb}{name}Command ToCommand(this {verb}{name}Request request, {pkType} id) =>");
         sb.AppendLine("        new(");
         for (int i = 0; i < commandCols.Count; i++)
@@ -155,6 +193,11 @@ public sealed class EntityMappingsEmitter : IEmitter
             var value = pkCols.Contains(col.Name) ? "id" : $"request.{prop}";
             var terminator = i == commandCols.Count - 1 ? ");" : ",";
             sb.AppendLine($"            {value}{terminator}");
+        }
+        if (anyDeprecated)
+        {
+            sb.AppendLine("    #pragma warning restore CS0618");
+            sb.AppendLine("    #pragma warning restore CS0612");
         }
     }
 }

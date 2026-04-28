@@ -12,6 +12,7 @@ public sealed class EndpointRegistrationEmitter : IEmitter
     {
         var project = ctx.Config.ProjectName;
         var corrections = ctx.NamingCorrections;
+        var versioningEnabled = ctx.Config.ApiVersioning != ApiVersioningKind.None;
 
         var entities = ctx.Model.Entities
             .Where(e => !e.ShouldSkip(EntityClassification.AggregateRoot))
@@ -22,17 +23,32 @@ public sealed class EndpointRegistrationEmitter : IEmitter
         sb.AppendLine($"using {project}.Api.Endpoints;");
         sb.AppendLine("using Microsoft.AspNetCore.Builder;");
         sb.AppendLine("using Microsoft.AspNetCore.Routing;");
+        if (versioningEnabled)
+            sb.AppendLine("using Asp.Versioning.Builder;");
         sb.AppendLine();
         sb.AppendLine($"namespace {project}.Api;");
         sb.AppendLine();
         sb.AppendLine("public static class EndpointRegistration");
         sb.AppendLine("{");
-        sb.AppendLine("    public static IEndpointRouteBuilder MapApiEndpoints(this IEndpointRouteBuilder app)");
-        sb.AppendLine("    {");
-        foreach (var entity in entities)
+        if (versioningEnabled)
         {
-            var plural = CasingHelper.ToPascalCase(Pluralizer.Pluralize(entity.EntityTypeName), corrections);
-            sb.AppendLine($"        app.Map{plural}Endpoints();");
+            sb.AppendLine("    public static IEndpointRouteBuilder MapApiEndpoints(this IEndpointRouteBuilder app, ApiVersionSet versionSet)");
+            sb.AppendLine("    {");
+            foreach (var entity in entities)
+            {
+                var plural = CasingHelper.ToPascalCase(Pluralizer.Pluralize(entity.EntityTypeName), corrections);
+                sb.AppendLine($"        app.Map{plural}Endpoints(versionSet);");
+            }
+        }
+        else
+        {
+            sb.AppendLine("    public static IEndpointRouteBuilder MapApiEndpoints(this IEndpointRouteBuilder app)");
+            sb.AppendLine("    {");
+            foreach (var entity in entities)
+            {
+                var plural = CasingHelper.ToPascalCase(Pluralizer.Pluralize(entity.EntityTypeName), corrections);
+                sb.AppendLine($"        app.Map{plural}Endpoints();");
+            }
         }
         sb.AppendLine("        return app;");
         sb.AppendLine("    }");

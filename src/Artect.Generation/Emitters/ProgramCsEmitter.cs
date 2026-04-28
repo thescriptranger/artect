@@ -39,6 +39,10 @@ public sealed class ProgramCsEmitter : IEmitter
         var authEnabled = auth != AuthKind.None;
         var authTemplateContent = authEnabled ? LoadAuthTemplate(ctx, auth) : null;
 
+        var versioning = ctx.Config.ApiVersioning;
+        var versioningEnabled = versioning != ApiVersioningKind.None;
+        var versioningTemplateContent = versioningEnabled ? LoadVersioningTemplate(ctx, versioning) : null;
+
         var sb = new StringBuilder();
         sb.AppendLine($"using {project}.Api;");
         sb.AppendLine($"using {project}.Api.Middleware;");
@@ -71,9 +75,16 @@ public sealed class ProgramCsEmitter : IEmitter
             sb.AppendLine();
             sb.AppendLine("// V#9: authentication + authorization wiring (from auth template).");
             sb.Append(authTemplateContent);
-            // Templates may or may not end with a newline; ensure one before the next
-            // service registration line.
             if (!authTemplateContent!.EndsWith('\n'))
+                sb.AppendLine();
+            sb.AppendLine();
+        }
+        if (versioningEnabled)
+        {
+            sb.AppendLine();
+            sb.AppendLine("// V#10: API versioning service registration (from versioning template).");
+            sb.Append(versioningTemplateContent);
+            if (!versioningTemplateContent!.EndsWith('\n'))
                 sb.AppendLine();
             sb.AppendLine();
         }
@@ -100,7 +111,22 @@ public sealed class ProgramCsEmitter : IEmitter
             sb.AppendLine("app.UseAuthorization();");
         }
         sb.AppendLine("app.MapHealthChecks(\"/health\");");
-        sb.AppendLine("app.MapApiEndpoints();");
+        if (versioningEnabled)
+        {
+            sb.AppendLine();
+            sb.AppendLine("// V#10: shared ApiVersionSet — generated endpoints register against it. Add new");
+            sb.AppendLine("// versions here (.HasApiVersion(new ApiVersion(2, 0)) etc.) when you ship V2.");
+            sb.AppendLine("var apiVersionSet = app.NewApiVersionSet()");
+            sb.AppendLine("    .HasApiVersion(new Asp.Versioning.ApiVersion(1, 0))");
+            sb.AppendLine("    .ReportApiVersions()");
+            sb.AppendLine("    .Build();");
+            sb.AppendLine();
+            sb.AppendLine("app.MapApiEndpoints(apiVersionSet);");
+        }
+        else
+        {
+            sb.AppendLine("app.MapApiEndpoints();");
+        }
         sb.AppendLine();
         sb.AppendLine("await app.RunAsync();");
         sb.AppendLine();
@@ -115,5 +141,13 @@ public sealed class ProgramCsEmitter : IEmitter
         AuthKind.AzureAd   => ctx.Templates.Load("AuthAzureAd.cs.artect"),
         AuthKind.ApiKey    => ctx.Templates.Load("AuthApiKey.cs.artect"),
         _                  => string.Empty,
+    };
+
+    static string LoadVersioningTemplate(EmitterContext ctx, ApiVersioningKind kind) => kind switch
+    {
+        ApiVersioningKind.Header      => ctx.Templates.Load("VersioningHeader.cs.artect"),
+        ApiVersioningKind.QueryString => ctx.Templates.Load("VersioningQueryString.cs.artect"),
+        ApiVersioningKind.UrlSegment  => ctx.Templates.Load("VersioningUrlSegment.cs.artect"),
+        _                             => string.Empty,
     };
 }

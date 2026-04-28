@@ -39,6 +39,7 @@ public sealed class ResponseEmitter : IEmitter
                     PropertyName = EntityNaming.PropertyName(c, ctx.NamingCorrections),
                     ClrTypeWithNullability = clrTypeWithNullability,
                     Initializer = !c.IsNullable && c.ClrType == ClrType.String ? " = string.Empty;" : string.Empty,
+                    IsDeprecated = entity.ColumnHasFlag(c.Name, ColumnMetadata.Deprecated),
                 };
             }).ToList();
 

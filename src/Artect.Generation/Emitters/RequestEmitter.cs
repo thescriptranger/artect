@@ -131,6 +131,7 @@ public sealed class RequestEmitter : IEmitter
                 HasRange = false,
                 RangeMin = string.Empty,
                 RangeMax = string.Empty,
+                IsDeprecated = entity.ColumnHasFlag(c.Name, ColumnMetadata.Deprecated),
             });
         }
         return result;

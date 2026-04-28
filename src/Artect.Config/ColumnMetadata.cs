@@ -11,4 +11,5 @@ public enum ColumnMetadata
     ConcurrencyToken    = 1 << 2,
     Audit               = 1 << 3,
     Sensitive           = 1 << 4,
+    Deprecated          = 1 << 5,
 }
