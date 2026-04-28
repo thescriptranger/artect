@@ -29,13 +29,14 @@ public sealed class ApiValidatorsEmitter : IEmitter
             var name = entity.EntityTypeName;
             var pkCols = entity.Table.PrimaryKey!.ColumnNames.ToHashSet(System.StringComparer.OrdinalIgnoreCase);
 
-            // Create request: skip server-generated PK columns (matches RequestEmitter)
-            var createCols = entity.Table.Columns
-                .Where(c => !(pkCols.Contains(c.Name) && c.IsServerGenerated))
-                .ToList();
-
-            // Update / Patch request: all columns
-            var allCols = entity.Table.Columns.ToList();
+            // Mirror RequestEmitter.BuildProperties so the validator iterates only the
+            // properties that actually exist on each request type. Pre-fix this emitter
+            // walked every column on the table, which produced CS1061 (no such member)
+            // for properties RequestEmitter dropped (Ignored, ProtectedFromUpdate,
+            // non-PK server-generated) and CS1061 on PATCH PKs (which are plain T,
+            // not Optional<T?>).
+            var createCols = ColumnsForKind(entity, pkCols, isCreate: true);
+            var updateCols = ColumnsForKind(entity, pkCols, isCreate: false);
 
             var sb = new StringBuilder();
             sb.AppendLine($"using {sharedReqNs};");
@@ -45,11 +46,11 @@ public sealed class ApiValidatorsEmitter : IEmitter
             sb.AppendLine();
 
             if ((crud & CrudOperation.Post) != 0)
-                EmitValidatorClass(sb, $"Create{name}Request", createCols, corrections, isPatch: false);
+                EmitValidatorClass(sb, $"Create{name}Request", createCols, pkCols, corrections, isPatch: false);
             if ((crud & CrudOperation.Put) != 0)
-                EmitValidatorClass(sb, $"Update{name}Request", allCols, corrections, isPatch: false);
+                EmitValidatorClass(sb, $"Update{name}Request", updateCols, pkCols, corrections, isPatch: false);
             if ((crud & CrudOperation.Patch) != 0)
-                EmitValidatorClass(sb, $"Patch{name}Request", allCols, corrections, isPatch: true);
+                EmitValidatorClass(sb, $"Patch{name}Request", updateCols, pkCols, corrections, isPatch: true);
 
             list.Add(new EmittedFile(
                 CleanLayout.ApiValidatorsPath(project, $"{name}Validators"),
@@ -58,8 +59,31 @@ public sealed class ApiValidatorsEmitter : IEmitter
         return list;
     }
 
+    /// <summary>
+    /// Mirrors <c>RequestEmitter.BuildProperties</c> column-filter logic so the validator
+    /// only iterates properties that actually exist on the request type.
+    /// </summary>
+    static List<Column> ColumnsForKind(NamedEntity entity, HashSet<string> pkCols, bool isCreate)
+    {
+        return entity.Table.Columns.Where(c =>
+        {
+            if (entity.ColumnHasFlag(c.Name, ColumnMetadata.Ignored)) return false;
+            var isPk = pkCols.Contains(c.Name);
+            if (isCreate)
+            {
+                if (isPk && c.IsServerGenerated) return false;
+            }
+            else
+            {
+                if (entity.ColumnHasFlag(c.Name, ColumnMetadata.ProtectedFromUpdate)) return false;
+                if (!isPk && c.IsServerGenerated) return false;
+            }
+            return true;
+        }).ToList();
+    }
+
     static void EmitValidatorClass(StringBuilder sb, string requestTypeName, IReadOnlyList<Column> cols,
-        IReadOnlyDictionary<string, string> corrections, bool isPatch)
+        HashSet<string> pkCols, IReadOnlyDictionary<string, string> corrections, bool isPatch)
     {
         sb.AppendLine($"public sealed partial class {requestTypeName}Validator : IValidator<{requestTypeName}>");
         sb.AppendLine("{");
@@ -74,16 +98,21 @@ public sealed class ApiValidatorsEmitter : IEmitter
         sb.AppendLine("        }");
         sb.AppendLine();
 
-        // V#5 PATCH semantics: every field is wrapped in Optional<T?>. A field is only
-        // validated when the client actually supplied it (HasValue == true). Once unwrapped
-        // via .Value, the inner type is T? — we use pattern matching ("is { } x") to
-        // reject null and bind the non-null payload for further checks.
+        // V#5 PATCH semantics: non-PK fields are wrapped in Optional<T?> by RequestEmitter,
+        // but PK fields stay plain (so the URL-supplied id can be carried unchanged into the
+        // command). Each column therefore needs to know whether it's wrapped before deciding
+        // how to unwrap. Pattern matching against the inner T? value rejects null and binds
+        // the non-null payload for further checks.
         foreach (var col in cols)
         {
             var prop = EntityNaming.PropertyName(col, corrections);
+            var isPk = pkCols.Contains(col.Name);
+            // Optional<T?> wrap follows RequestEmitter: PATCH + non-PK only.
+            var wrapped = isPatch && !isPk;
+
             if (!col.IsNullable && col.ClrType == ClrType.String)
             {
-                if (isPatch)
+                if (wrapped)
                 {
                     sb.AppendLine($"        if (dto.{prop}.HasValue && string.IsNullOrWhiteSpace(dto.{prop}.Value))");
                 }
@@ -95,7 +124,7 @@ public sealed class ApiValidatorsEmitter : IEmitter
             }
             if (col.ClrType == ClrType.String && col.MaxLength is int max && max > 0)
             {
-                if (isPatch)
+                if (wrapped)
                 {
                     sb.AppendLine($"        if (dto.{prop}.Value is {{ Length: > {max} }})");
                 }
@@ -107,7 +136,7 @@ public sealed class ApiValidatorsEmitter : IEmitter
             }
             if (!col.IsNullable && col.ClrType == ClrType.Guid)
             {
-                if (isPatch)
+                if (wrapped)
                 {
                     sb.AppendLine($"        if (dto.{prop}.Value is System.Guid {prop}_v && {prop}_v == System.Guid.Empty)");
                 }
