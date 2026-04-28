@@ -35,6 +35,7 @@ public sealed class ArchitectureTestsEmitter : IEmitter
         {
             new EmittedFile($"{testsDir}/{testProject}.csproj", BuildCsproj(project, tfm)),
             new EmittedFile($"{testsDir}/LayerDependencyTests.cs", BuildTests(project, testProject)),
+            new EmittedFile($"{testsDir}/RegistrationCompletenessTests.cs", BuildRegistrationTests(project, testProject)),
         };
     }
 
@@ -124,6 +125,69 @@ public sealed class ArchitectureTestsEmitter : IEmitter
         sb.AppendLine("            ? \"<unknown>\"");
         sb.AppendLine("            : string.Join(\", \", result.FailingTypeNames);");
         sb.AppendLine("        return layer + \" violates layer dependency rules. Offending types: \" + offenders;");
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+        return sb.ToString();
+    }
+
+    static string BuildRegistrationTests(string project, string testsNs)
+    {
+        var application = $"{project}.Application";
+        var infrastructure = $"{project}.Infrastructure";
+        var absNs = $"{project}.Application.Abstractions";
+
+        var sb = new StringBuilder();
+        sb.AppendLine("using System.Linq;");
+        sb.AppendLine("using System.Reflection;");
+        sb.AppendLine($"using {absNs};");
+        sb.AppendLine("using Xunit;");
+        sb.AppendLine();
+        sb.AppendLine($"namespace {testsNs};");
+        sb.AppendLine();
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine("/// V#15 acceptance #3: missing handler/repository registrations fail at test time,");
+        sb.AppendLine("/// not at runtime under load. For every IRepository- and IReadService-derived");
+        sb.AppendLine("/// interface declared in Application, this asserts exactly one concrete");
+        sb.AppendLine("/// implementation lives in Infrastructure. The marker-driven scan in");
+        sb.AppendLine("/// Infrastructure.DependencyInjection then picks the impl up automatically.");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine("public class RegistrationCompletenessTests");
+        sb.AppendLine("{");
+        sb.AppendLine($"    static Assembly Application() => Assembly.Load(\"{application}\");");
+        sb.AppendLine($"    static Assembly Infrastructure() => Assembly.Load(\"{infrastructure}\");");
+        sb.AppendLine();
+        sb.AppendLine("    [Fact]");
+        sb.AppendLine("    public void Every_IRepository_has_an_Infrastructure_impl()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        AssertExactlyOneImplPerInterface(typeof(IRepository));");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    [Fact]");
+        sb.AppendLine("    public void Every_IReadService_has_an_Infrastructure_impl()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        AssertExactlyOneImplPerInterface(typeof(IReadService));");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    static void AssertExactlyOneImplPerInterface(System.Type marker)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var interfaces = Application().GetExportedTypes()");
+        sb.AppendLine("            .Where(t => t.IsInterface && t != marker && marker.IsAssignableFrom(t))");
+        sb.AppendLine("            .ToList();");
+        sb.AppendLine();
+        sb.AppendLine("        var concretes = Infrastructure().GetTypes()");
+        sb.AppendLine("            .Where(t => !t.IsAbstract && !t.IsInterface)");
+        sb.AppendLine("            .ToList();");
+        sb.AppendLine();
+        sb.AppendLine("        var missing = new System.Collections.Generic.List<string>();");
+        sb.AppendLine("        foreach (var iface in interfaces)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var impls = concretes.Where(c => iface.IsAssignableFrom(c)).ToList();");
+        sb.AppendLine("            if (impls.Count == 0) missing.Add($\"{iface.Name}: no implementation in Infrastructure\");");
+        sb.AppendLine("            else if (impls.Count > 1) missing.Add($\"{iface.Name}: ambiguous — \" + string.Join(\", \", impls.Select(i => i.Name)));");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        Assert.True(missing.Count == 0,");
+        sb.AppendLine("            $\"{marker.Name} registration completeness violations: \" + string.Join(\"; \", missing));");
         sb.AppendLine("    }");
         sb.AppendLine("}");
         return sb.ToString();

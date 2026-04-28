@@ -52,20 +52,8 @@ public sealed class InfrastructureDiEmitter : IEmitter
             sb.AppendLine("using Microsoft.Extensions.Hosting;");
         }
 
-        var repoEntities = ctx.Model.Entities
-            .Where(e => !e.ShouldSkip(EntityClassification.AggregateRoot))
-            .ToList();
-        var readServiceEntities = ctx.Model.Entities
-            .Where(e => !e.ShouldSkip(EntityClassification.AggregateRoot, EntityClassification.ReadModel))
-            .ToList();
-        var diEntities = repoEntities.Union(readServiceEntities)
-            .OrderBy(e => e.EntityTypeName, System.StringComparer.Ordinal)
-            .ToList();
-        foreach (var entity in diEntities)
-        {
-            sb.AppendLine($"using {CleanLayout.InfrastructureDataEntityNamespace(project, entity.EntityTypeName)};");
-            sb.AppendLine($"using {CleanLayout.ApplicationFeatureAbstractionsNamespace(project, entity.EntityTypeName)};");
-        }
+        // V#15: per-entity using directives are no longer needed — repositories and
+        // read services are registered via a marker-driven assembly scan below.
 
         sb.AppendLine();
         sb.AppendLine($"namespace {infraNs};");
@@ -118,17 +106,22 @@ public sealed class InfrastructureDiEmitter : IEmitter
         sb.AppendLine("        services.AddScoped<IUnitOfWork, EfUnitOfWork>();");
         sb.AppendLine();
 
-        foreach (var entity in repoEntities.OrderBy(e => e.EntityTypeName, System.StringComparer.Ordinal))
-        {
-            var name = entity.EntityTypeName;
-            sb.AppendLine($"        services.AddScoped<I{name}Repository, {name}Repository>();");
-        }
-
-        foreach (var entity in readServiceEntities.OrderBy(e => e.EntityTypeName, System.StringComparer.Ordinal))
-        {
-            var name = entity.EntityTypeName;
-            sb.AppendLine($"        services.AddScoped<I{name}ReadService, {name}ReadService>();");
-        }
+        sb.AppendLine("        // V#15: marker-driven repository + read-service registration. Adding a new");
+        sb.AppendLine("        // aggregate adds zero lines to this file — the scan picks up any concrete");
+        sb.AppendLine("        // type that implements an IRepository-derived or IReadService-derived");
+        sb.AppendLine("        // interface (the markers live in Application.Abstractions). Registration");
+        sb.AppendLine("        // completeness is verified by Architecture.Tests at build time.");
+        sb.AppendLine("        var infrastructureAssembly = typeof(DependencyInjection).Assembly;");
+        sb.AppendLine("        foreach (var impl in infrastructureAssembly.GetTypes())");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (impl.IsAbstract || impl.IsInterface) continue;");
+        sb.AppendLine("            foreach (var iface in impl.GetInterfaces())");
+        sb.AppendLine("            {");
+        sb.AppendLine("                if (iface == typeof(IRepository) || iface == typeof(IReadService)) continue;");
+        sb.AppendLine("                if (typeof(IRepository).IsAssignableFrom(iface) || typeof(IReadService).IsAssignableFrom(iface))");
+        sb.AppendLine("                    services.AddScoped(iface, impl);");
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
 
         if (hasSprocOrFunc)
         {

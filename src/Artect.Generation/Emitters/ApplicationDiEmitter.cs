@@ -1,32 +1,28 @@
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using Artect.Config;
 
 namespace Artect.Generation.Emitters;
 
+/// <summary>
+/// V#15: emits the Application DI installer as a single assembly scan rather than
+/// a per-entity AddScoped block. Generated handlers (Create/Update/Patch/Delete)
+/// are picked up by their class-name suffix and registered as themselves; the
+/// same iteration also binds them against every <c>ICommandHandler&lt;,&gt;</c> /
+/// <c>IQueryHandler&lt;,&gt;</c> they implement, so cross-cutting decorators can wrap
+/// generated and hand-written use cases uniformly. Adding an entity adds zero
+/// lines to this file.
+/// </summary>
 public sealed class ApplicationDiEmitter : IEmitter
 {
     public IReadOnlyList<EmittedFile> Emit(EmitterContext ctx)
     {
         var project = ctx.Config.ProjectName;
-        var crud    = ctx.Config.Crud;
-        var anyWrite = (crud & (CrudOperation.Post | CrudOperation.Put | CrudOperation.Patch | CrudOperation.Delete)) != 0;
-
         var ns = CleanLayout.ApplicationNamespace(project);
-        var entities = ctx.Model.Entities
-            .Where(e => !e.ShouldSkip(EntityClassification.AggregateRoot))
-            .OrderBy(e => e.EntityTypeName, System.StringComparer.Ordinal)
-            .ToList();
+        var absNs = CleanLayout.ApplicationAbstractionsNamespace(project);
 
         var sb = new StringBuilder();
         sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
-        sb.AppendLine($"using {CleanLayout.ApplicationAbstractionsNamespace(project)};");
-        if (anyWrite)
-        {
-            foreach (var entity in entities)
-                sb.AppendLine($"using {CleanLayout.ApplicationFeatureNamespace(project, entity.EntityTypeName)};");
-        }
+        sb.AppendLine($"using {absNs};");
         sb.AppendLine();
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
@@ -34,33 +30,20 @@ public sealed class ApplicationDiEmitter : IEmitter
         sb.AppendLine("{");
         sb.AppendLine("    public static IServiceCollection AddApplication(this IServiceCollection services)");
         sb.AppendLine("    {");
-
-        if (anyWrite)
-        {
-            foreach (var entity in entities)
-            {
-                var name = entity.EntityTypeName;
-                if ((crud & CrudOperation.Post) != 0)
-                    sb.AppendLine($"        services.AddScoped<Create{name}Handler>();");
-                if ((crud & CrudOperation.Put) != 0)
-                    sb.AppendLine($"        services.AddScoped<Update{name}Handler>();");
-                if ((crud & CrudOperation.Patch) != 0)
-                    sb.AppendLine($"        services.AddScoped<Patch{name}Handler>();");
-                if ((crud & CrudOperation.Delete) != 0)
-                    sb.AppendLine($"        services.AddScoped<Delete{name}Handler>();");
-            }
-        }
-
-        sb.AppendLine();
-        sb.AppendLine("        // V#6: scan this assembly for ICommandHandler<,> / IQueryHandler<,>");
-        sb.AppendLine("        // implementations and register each one against its interface(s). Picks up");
-        sb.AppendLine("        // generated CRUD handlers (Create/Update/Patch — they implement");
-        sb.AppendLine("        // ICommandHandler<>) AND any hand-written use cases the user adds in");
-        sb.AppendLine("        // Application/UseCases/. No manual DI wiring needed for new use cases.");
+        sb.AppendLine("        // V#15: assembly-scan registration for all generated and hand-written use cases.");
+        sb.AppendLine("        // 1. Concrete *Handler classes register as themselves so endpoints can inject");
+        sb.AppendLine("        //    the concrete handler (e.g., CreateCustomerHandler).");
+        sb.AppendLine("        // 2. The same types also register against every ICommandHandler<,> / IQueryHandler<,>");
+        sb.AppendLine("        //    interface they implement, so future decorators (validation, transaction,");
+        sb.AppendLine("        //    audit, authorization) can wrap generated and hand-written handlers uniformly.");
         sb.AppendLine("        var assembly = typeof(DependencyInjection).Assembly;");
         sb.AppendLine("        foreach (var type in assembly.GetTypes())");
         sb.AppendLine("        {");
         sb.AppendLine("            if (type.IsAbstract || type.IsInterface) continue;");
+        sb.AppendLine();
+        sb.AppendLine("            if (type.Name.EndsWith(\"Handler\", System.StringComparison.Ordinal))");
+        sb.AppendLine("                services.AddScoped(type);");
+        sb.AppendLine();
         sb.AppendLine("            foreach (var iface in type.GetInterfaces())");
         sb.AppendLine("            {");
         sb.AppendLine("                if (!iface.IsGenericType) continue;");

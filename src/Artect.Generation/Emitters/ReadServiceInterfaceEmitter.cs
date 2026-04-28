@@ -34,10 +34,11 @@ public sealed class ReadServiceInterfaceEmitter : IEmitter
 
             var sb = new StringBuilder();
             sb.AppendLine($"using {dtosNs};");
+            sb.AppendLine($"using {CleanLayout.ApplicationAbstractionsNamespace(project)};");
             sb.AppendLine();
             sb.AppendLine($"namespace {ns};");
             sb.AppendLine();
-            sb.AppendLine($"public interface I{name}ReadService");
+            sb.AppendLine($"public interface I{name}ReadService : IReadService");
             sb.AppendLine("{");
             if ((crud & CrudOperation.GetList) != 0)
                 sb.AppendLine($"    Task<(IReadOnlyList<{name}Dto> Items, int TotalCount)> GetPagedAsync(int page, int pageSize, string? sort, CancellationToken ct);");

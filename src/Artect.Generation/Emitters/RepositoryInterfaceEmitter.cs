@@ -36,10 +36,11 @@ public sealed class RepositoryInterfaceEmitter : IEmitter
 
             var sb = new StringBuilder();
             sb.AppendLine($"using {entityNs};");
+            sb.AppendLine($"using {CleanLayout.ApplicationAbstractionsNamespace(project)};");
             sb.AppendLine();
             sb.AppendLine($"namespace {ns};");
             sb.AppendLine();
-            sb.AppendLine($"public interface I{name}Repository");
+            sb.AppendLine($"public interface I{name}Repository : IRepository");
             sb.AppendLine("{");
             sb.AppendLine($"    Task<{name}?> GetByIdAsync({pkType} id, CancellationToken ct);");
             sb.AppendLine($"    Task<bool> ExistsAsync({pkType} id, CancellationToken ct);");

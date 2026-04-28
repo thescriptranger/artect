@@ -35,6 +35,12 @@ public sealed class UseCasesEmitter : IEmitter
                 CleanLayout.ApplicationAbstractionsPath(project, "IQueryHandler"),
                 BuildQueryHandler(ns)),
             new EmittedFile(
+                CleanLayout.ApplicationAbstractionsPath(project, "IRepository"),
+                BuildRepositoryMarker(ns)),
+            new EmittedFile(
+                CleanLayout.ApplicationAbstractionsPath(project, "IReadService"),
+                BuildReadServiceMarker(ns)),
+            new EmittedFile(
                 CleanLayout.ApplicationAbstractionsPath(project, "QueryValidationException"),
                 BuildQueryValidationException(ns)),
             new EmittedFile(
@@ -108,6 +114,39 @@ public sealed class UseCasesEmitter : IEmitter
         sb.AppendLine("public interface ITenantContext");
         sb.AppendLine("{");
         sb.AppendLine("    Guid CurrentTenantId { get; }");
+        sb.AppendLine("}");
+        return sb.ToString();
+    }
+
+    static string BuildRepositoryMarker(string ns)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"namespace {ns};");
+        sb.AppendLine();
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine("/// V#15 marker. Every <c>I&lt;Aggregate&gt;Repository</c> extends this interface so");
+        sb.AppendLine("/// Infrastructure DI can register all aggregate-write ports with one assembly scan");
+        sb.AppendLine("/// instead of an explicit AddScoped per entity. Hand-written repository ports must");
+        sb.AppendLine("/// extend it too if they need automatic registration.");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine("public interface IRepository");
+        sb.AppendLine("{");
+        sb.AppendLine("}");
+        return sb.ToString();
+    }
+
+    static string BuildReadServiceMarker(string ns)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"namespace {ns};");
+        sb.AppendLine();
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine("/// V#15 marker. Every <c>I&lt;Aggregate&gt;ReadService</c> extends this interface so");
+        sb.AppendLine("/// Infrastructure DI can register all aggregate-read ports with one assembly scan.");
+        sb.AppendLine("/// Hand-written read ports must extend it too for automatic registration.");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine("public interface IReadService");
+        sb.AppendLine("{");
         sb.AppendLine("}");
         return sb.ToString();
     }
