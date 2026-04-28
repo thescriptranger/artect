@@ -39,11 +39,13 @@ public sealed class SlnEmitter : IEmitter
             var appTests    = $"{project}.Application.Tests";
             var infraTests  = $"{project}.Infrastructure.Tests";
             var apiTests    = $"{project}.Api.Tests";
+            var archTests   = $"{project}.Architecture.Tests";
 
             testPaths.Add($"tests/{domainTests}/{domainTests}.csproj");
             testPaths.Add($"tests/{appTests}/{appTests}.csproj");
             testPaths.Add($"tests/{infraTests}/{infraTests}.csproj");
             testPaths.Add($"tests/{apiTests}/{apiTests}.csproj");
+            testPaths.Add($"tests/{archTests}/{archTests}.csproj");
         }
 
         var projectTypeGuid = "{" + CsharpSdkProjectTypeGuid + "}";

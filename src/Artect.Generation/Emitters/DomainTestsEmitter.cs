@@ -60,6 +60,7 @@ public sealed class DomainTestsEmitter : IEmitter
         var project = ctx.Config.ProjectName;
         var e = entity.EntityTypeName;
         var sb = new StringBuilder();
+        sb.AppendLine("using System.Linq;");
         sb.AppendLine("using FluentAssertions;");
         sb.AppendLine("using Xunit;");
         sb.AppendLine($"using {project}.Domain.Common;");
@@ -105,14 +106,81 @@ public sealed class DomainTestsEmitter : IEmitter
             sb.AppendLine($"        var updateResult = instance.Update({BuildUpdateArgs(entity)});");
             sb.AppendLine($"        updateResult.Should().BeOfType<Result<{e}>.Success>();");
             sb.AppendLine("    }");
+
+            // V#14 acceptance #4: prove Update enforces the same invariants as Create —
+            // empty / too-long inputs must produce Result<T>.Failure, not silent mutation.
+            // Mirrors the Create_rejects_empty_<col> tests but exercises the Update path
+            // so the entity's invariant guard is independently verified.
+            foreach (var col in entity.UpdateableColumns()
+                         .Where(c => !c.IsNullable && c.ClrType == Artect.Core.Schema.ClrType.String))
+            {
+                var colName = col.Name;
+                sb.AppendLine();
+                sb.AppendLine($"    [Fact]");
+                sb.AppendLine($"    public void Update_rejects_empty_{colName}()");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        var createResult = {e}.Create({BuildCreateArgs(entity)});");
+                sb.AppendLine($"        var instance = ((Result<{e}>.Success)createResult).Value;");
+                sb.AppendLine($"        var updateResult = instance.Update({BuildUpdateArgs(entity, failingCol: colName)});");
+                sb.AppendLine($"        updateResult.Should().BeOfType<Result<{e}>.Failure>();");
+                sb.AppendLine("    }");
+            }
+
+            foreach (var col in entity.UpdateableColumns()
+                         .Where(c => !c.IsNullable
+                                     && c.ClrType == Artect.Core.Schema.ClrType.String
+                                     && c.MaxLength is int max && max > 0))
+            {
+                var colName = col.Name;
+                var max = col.MaxLength!.Value;
+                sb.AppendLine();
+                sb.AppendLine($"    [Fact]");
+                sb.AppendLine($"    public void Update_rejects_{colName}_too_long()");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        var createResult = {e}.Create({BuildCreateArgs(entity)});");
+                sb.AppendLine($"        var instance = ((Result<{e}>.Success)createResult).Value;");
+                sb.AppendLine($"        var updateResult = instance.Update({BuildUpdateArgs(entity, oversizedCol: colName, oversizedLength: max + 1)});");
+                sb.AppendLine($"        updateResult.Should().BeOfType<Result<{e}>.Failure>();");
+                sb.AppendLine("    }");
+            }
+        }
+
+        // V#14 acceptance #4: prove encapsulation. Aggregates and owned entities use
+        // private setters (V#2) so external code cannot bypass invariants by writing
+        // properties directly — the only mutation path is Update(...). A reflection
+        // sweep gives a single, low-maintenance test that fails loud if a future
+        // template change accidentally exposes a setter.
+        if (entity.EmitsBehavior())
+        {
+            sb.AppendLine();
+            sb.AppendLine("    [Fact]");
+            sb.AppendLine($"    public void {e}_properties_have_no_public_setters()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        var offenders = typeof({e}).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)");
+            sb.AppendLine("            .Where(p => p.SetMethod is { IsPublic: true })");
+            sb.AppendLine("            .Select(p => p.Name)");
+            sb.AppendLine("            .ToList();");
+            sb.AppendLine("        offenders.Should().BeEmpty(\"aggregates must enforce invariants through Update(), not public setters\");");
+            sb.AppendLine("    }");
         }
 
         sb.AppendLine("}");
         return new EmittedFile($"{testsDir}/Entities/{e}Tests.cs", sb.ToString());
     }
 
-    static string BuildUpdateArgs(NamedEntity entity) =>
-        string.Join(", ", entity.UpdateableColumns().Select(ValidPlaceholder));
+    static string BuildUpdateArgs(
+        NamedEntity entity,
+        string? failingCol = null,
+        string? oversizedCol = null,
+        int oversizedLength = 0) =>
+        string.Join(", ", entity.UpdateableColumns().Select(c =>
+        {
+            if (failingCol is not null && c.Name == failingCol)
+                return c.ClrType == Artect.Core.Schema.ClrType.String ? "\"\"" : "default";
+            if (oversizedCol is not null && c.Name == oversizedCol)
+                return $"new string('x', {oversizedLength})";
+            return ValidPlaceholder(c);
+        }));
 
     static string BuildCreateArgs(NamedEntity entity, string? failingCol = null)
     {

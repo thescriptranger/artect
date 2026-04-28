@@ -9,6 +9,7 @@ public static class EmitterRegistry
     {
         new ApiAuthEmitter(),
         new ApiDiEmitter(),
+        new ArchitectureTestsEmitter(),
         new ApiFiltersEmitter(),
         new ApiProblemEmitter(),
         new ApiTestsEmitter(),
