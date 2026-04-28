@@ -145,6 +145,7 @@ public sealed class ApiTestsEmitter : IEmitter
     {
         var entityName = entity.EntityTypeName;
         var requestsNs = CleanLayout.SharedRequestsNamespace(project);
+        var responsesNs = CleanLayout.SharedResponsesNamespace(project);
         var crud = cfg.Crud;
 
         var needsPayload = (crud & (CrudOperation.Post | CrudOperation.Put | CrudOperation.Patch)) != 0;
@@ -158,13 +159,28 @@ public sealed class ApiTestsEmitter : IEmitter
         var overrides = BuildMinimallyValidOverrides(entity, pkCols, corrections);
         var initializerBody = needsPayload ? BuildInitializer(overrides) : string.Empty;
 
+        // V#4: Put-doesn't-overwrite-protected test, gated on (>=1 visible
+        // ProtectedFromUpdate column) AND single-PK AND Post + GetById + Put all in CRUD
+        // (we need Post to seed, GetById to verify, Put to exercise).
+        var protectedVisibleCols = entity.Table.Columns
+            .Where(c => entity.ColumnHasFlag(c.Name, ColumnMetadata.ProtectedFromUpdate))
+            .Where(c => !entity.ColumnHasFlag(c.Name, ColumnMetadata.Ignored))
+            .Where(c => !entity.ColumnHasFlag(c.Name, ColumnMetadata.Sensitive))
+            .ToList();
+        var emitV4Test = protectedVisibleCols.Count > 0
+            && entity.Table.PrimaryKey!.ColumnNames.Count == 1
+            && (crud & CrudOperation.Post) != 0
+            && (crud & CrudOperation.GetById) != 0
+            && (crud & CrudOperation.Put) != 0;
+
         var usings = new StringBuilder();
         usings.AppendLine("using System.Net;");
-        if (needsPayload)
-        {
+        if (needsPayload || emitV4Test)
             usings.AppendLine("using System.Net.Http.Json;");
+        if (needsPayload)
             usings.AppendLine($"using {requestsNs};");
-        }
+        if (emitV4Test)
+            usings.AppendLine($"using {responsesNs};");
         usings.AppendLine("using Xunit;");
 
         var body = new StringBuilder();
@@ -229,6 +245,11 @@ public sealed class ApiTestsEmitter : IEmitter
             body.AppendLine($"        var response = await client.PutAsJsonAsync(\"/api/{route}/99999\", request).ConfigureAwait(false);");
             body.AppendLine("        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);");
             body.AppendLine("    }");
+        }
+
+        if (emitV4Test)
+        {
+            body.Append(BuildProtectedFieldsImmutabilityTest(entity, route, protectedVisibleCols, corrections));
         }
 
         if ((crud & CrudOperation.Delete) != 0)
@@ -357,4 +378,115 @@ public sealed class ApiTestsEmitter : IEmitter
         }
         return sb.ToString();
     }
+
+    /// <summary>
+    /// V#4: per-entity test that proves columns flagged ProtectedFromUpdate cannot be
+    /// overwritten via a PUT request, even when raw JSON contains them. Three layers of
+    /// protection are exercised end-to-end: V#3's removal from the request DTO (extra
+    /// JSON fields are dropped by the deserializer), V#2's omission from the entity's
+    /// Update method (handler can't pass them), and V#4's EF
+    /// PropertySaveBehavior.Ignore (final guard).
+    /// </summary>
+    static string BuildProtectedFieldsImmutabilityTest(
+        NamedEntity entity, string route,
+        IReadOnlyList<Column> protectedVisibleCols,
+        IReadOnlyDictionary<string, string> corrections)
+    {
+        var entityName = entity.EntityTypeName;
+        var pkCol = entity.Table.Columns.First(c =>
+            string.Equals(c.Name, entity.Table.PrimaryKey!.ColumnNames[0], System.StringComparison.OrdinalIgnoreCase));
+        var pkProp = EntityNaming.PropertyName(pkCol, corrections);
+        var pkColNames = entity.Table.PrimaryKey!.ColumnNames
+            .ToHashSet(System.StringComparer.OrdinalIgnoreCase);
+
+        var sb = new StringBuilder();
+        sb.AppendLine();
+        sb.AppendLine("    [Fact]");
+        sb.AppendLine($"    public async System.Threading.Tasks.Task Put_does_not_overwrite_protected_columns()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        using var client = _factory.CreateClient();");
+        sb.AppendLine();
+
+        // Seed via POST with all required fields populated.
+        sb.AppendLine($"        var createRequest = new Create{entityName}Request");
+        sb.AppendLine("        {");
+        foreach (var c in entity.Table.Columns)
+        {
+            if (entity.ColumnHasFlag(c.Name, ColumnMetadata.Ignored)) continue;
+            if (pkColNames.Contains(c.Name) && c.IsServerGenerated) continue;
+            sb.AppendLine($"            {EntityNaming.PropertyName(c, corrections)} = {ValidApiPlaceholder(c)},");
+        }
+        sb.AppendLine("        };");
+        sb.AppendLine($"        var createResponse = await client.PostAsJsonAsync(\"/api/{route}\", createRequest).ConfigureAwait(false);");
+        sb.AppendLine("        createResponse.EnsureSuccessStatusCode();");
+        sb.AppendLine($"        var created = await createResponse.Content.ReadFromJsonAsync<{entityName}Response>().ConfigureAwait(false);");
+        sb.AppendLine("        Assert.NotNull(created);");
+        sb.AppendLine($"        var id = created!.{pkProp};");
+        sb.AppendLine();
+
+        // Capture initial protected values via GET.
+        sb.AppendLine($"        var getInitial = await client.GetAsync($\"/api/{route}/{{id}}\").ConfigureAwait(false);");
+        sb.AppendLine("        getInitial.EnsureSuccessStatusCode();");
+        sb.AppendLine($"        var initial = await getInitial.Content.ReadFromJsonAsync<{entityName}Response>().ConfigureAwait(false);");
+        sb.AppendLine("        Assert.NotNull(initial);");
+        sb.AppendLine();
+
+        // Build a valid Update request body, then inject extra JSON fields for the
+        // protected columns at deliberately-different values.
+        sb.AppendLine($"        var updateRequest = new Update{entityName}Request");
+        sb.AppendLine("        {");
+        sb.AppendLine($"            {pkProp} = id,");
+        foreach (var c in entity.UpdateableColumns())
+        {
+            sb.AppendLine($"            {EntityNaming.PropertyName(c, corrections)} = {ValidApiPlaceholder(c)},");
+        }
+        sb.AppendLine("        };");
+        sb.AppendLine("        var jsonNode = (System.Text.Json.Nodes.JsonObject)System.Text.Json.JsonSerializer.SerializeToNode(updateRequest)!;");
+        foreach (var c in protectedVisibleCols)
+        {
+            var prop = EntityNaming.PropertyName(c, corrections);
+            sb.AppendLine($"        jsonNode[\"{prop}\"] = {DistinctJsonValue(c)};");
+        }
+        sb.AppendLine("        var putContent = new System.Net.Http.StringContent(jsonNode.ToJsonString(), System.Text.Encoding.UTF8, \"application/json\");");
+        sb.AppendLine($"        var putResponse = await client.PutAsync($\"/api/{route}/{{id}}\", putContent).ConfigureAwait(false);");
+        sb.AppendLine("        putResponse.EnsureSuccessStatusCode();");
+        sb.AppendLine();
+
+        // GET again; assert each protected column matches its initial value.
+        sb.AppendLine($"        var getAfter = await client.GetAsync($\"/api/{route}/{{id}}\").ConfigureAwait(false);");
+        sb.AppendLine("        getAfter.EnsureSuccessStatusCode();");
+        sb.AppendLine($"        var actual = await getAfter.Content.ReadFromJsonAsync<{entityName}Response>().ConfigureAwait(false);");
+        sb.AppendLine("        Assert.NotNull(actual);");
+        foreach (var c in protectedVisibleCols)
+        {
+            var prop = EntityNaming.PropertyName(c, corrections);
+            sb.AppendLine($"        Assert.Equal(initial!.{prop}, actual!.{prop});");
+        }
+        sb.AppendLine("    }");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Produces a C# expression whose runtime value is JSON-serializable to a value
+    /// distinct from <see cref="ValidApiPlaceholder"/>. Used by V#4's protected-fields
+    /// test to inject "obviously different" values via JsonNode so any failure to
+    /// preserve the original is visible in the diff.
+    /// </summary>
+    static string DistinctJsonValue(Column c) => c.ClrType switch
+    {
+        ClrType.String         => "\"OVERWRITE_ATTEMPT\"",
+        ClrType.Int32          => "99999",
+        ClrType.Int64          => "99999L",
+        ClrType.Int16          => "(short)9999",
+        ClrType.Byte           => "(byte)99",
+        ClrType.Boolean        => "true",
+        ClrType.Decimal        => "99999m",
+        ClrType.Double         => "99999.0",
+        ClrType.Single         => "99999.0f",
+        ClrType.DateTime       => "\"2099-12-31T23:59:59Z\"",
+        ClrType.DateTimeOffset => "\"2099-12-31T23:59:59+00:00\"",
+        ClrType.Guid           => "\"00000000-0000-0000-0000-999999999999\"",
+        ClrType.ByteArray      => "\"AAAA\"",
+        _                      => "null",
+    };
 }

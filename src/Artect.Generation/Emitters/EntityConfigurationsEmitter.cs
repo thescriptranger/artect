@@ -47,6 +47,7 @@ public sealed class EntityConfigurationsEmitter : IEmitter
 
             var sb = new StringBuilder();
             sb.AppendLine("using Microsoft.EntityFrameworkCore;");
+            sb.AppendLine("using Microsoft.EntityFrameworkCore.Metadata;");
             sb.AppendLine("using Microsoft.EntityFrameworkCore.Metadata.Builders;");
             sb.AppendLine($"using {entityNs};");
             sb.AppendLine();
@@ -123,6 +124,11 @@ public sealed class EntityConfigurationsEmitter : IEmitter
             if (entity.ColumnHasFlag(col.Name, ColumnMetadata.ConcurrencyToken))
                 line += ".IsConcurrencyToken()";
             sb.AppendLine(line + ";");
+            // V#4 defense-in-depth: ProtectedFromUpdate columns are excluded from any
+            // UPDATE statement. Even if a code path mutates the property in memory, EF
+            // refuses to write it. Belt-and-suspenders with V#3's API-contract removal.
+            if (entity.ColumnHasFlag(col.Name, ColumnMetadata.ProtectedFromUpdate))
+                sb.AppendLine($"        builder.Property(e => e.{prop}).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);");
         }
 
         // Reference navigations / FK relationships
