@@ -23,8 +23,7 @@ public sealed class CommandRecordsEmitter : IEmitter
 
         foreach (var entity in ctx.Model.Entities)
         {
-            if (entity.IsJoinTable) continue;
-            if (!entity.HasPrimaryKey) continue;
+            if (entity.ShouldSkip(EntityClassification.AggregateRoot)) continue;
 
             var name = entity.EntityTypeName;
             var nonServerGen = entity.Table.Columns.Where(c => !c.IsServerGenerated).ToList();

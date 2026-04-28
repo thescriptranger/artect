@@ -24,8 +24,7 @@ public sealed class ApiValidatorsEmitter : IEmitter
 
         foreach (var entity in ctx.Model.Entities)
         {
-            if (entity.IsJoinTable) continue;
-            if (!entity.HasPrimaryKey) continue;
+            if (entity.ShouldSkip(EntityClassification.AggregateRoot)) continue;
 
             var name = entity.EntityTypeName;
             var pkCols = entity.Table.PrimaryKey!.ColumnNames.ToHashSet(System.StringComparer.OrdinalIgnoreCase);

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Artect.Config;
 using Artect.Templating;
 
 namespace Artect.Generation.Emitters;
@@ -11,8 +12,7 @@ public sealed class EntityBehaviorEmitter : IEmitter
         var list = new List<EmittedFile>();
         foreach (var entity in ctx.Model.Entities)
         {
-            if (entity.IsJoinTable) continue;
-            if (!entity.HasPrimaryKey) continue;
+            if (entity.ShouldSkip(EntityClassification.AggregateRoot, EntityClassification.OwnedEntity)) continue;
             var data = new
             {
                 Namespace = $"{CleanLayout.DomainNamespace(ctx.Config.ProjectName)}.Entities",

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Artect.Config;
 using Artect.Core.Schema;
 using Artect.Naming;
 using Artect.Templating;
@@ -16,14 +17,13 @@ public sealed class RequestEmitter : IEmitter
 
         foreach (var entity in ctx.Model.Entities)
         {
-            if (entity.IsJoinTable) continue;
-            if (!entity.HasPrimaryKey) continue;
+            if (entity.ShouldSkip(EntityClassification.AggregateRoot)) continue;
 
             var pkCols = entity.Table.PrimaryKey!.ColumnNames
                 .ToHashSet(System.StringComparer.OrdinalIgnoreCase);
 
             // Create request: skip PK (identity) columns
-            var createProps = BuildProperties(entity.Table, pkCols, isCreate: true, ctx.NamingCorrections);
+            var createProps = BuildProperties(entity, pkCols, isCreate: true, ctx.NamingCorrections);
             var createData = new
             {
                 Namespace = ns,
@@ -36,7 +36,7 @@ public sealed class RequestEmitter : IEmitter
             list.Add(new EmittedFile(createPath, createRendered));
 
             // Update request: include PK columns
-            var updateProps = BuildProperties(entity.Table, pkCols, isCreate: false, ctx.NamingCorrections);
+            var updateProps = BuildProperties(entity, pkCols, isCreate: false, ctx.NamingCorrections);
             var updateData = new
             {
                 Namespace = ns,
@@ -52,11 +52,13 @@ public sealed class RequestEmitter : IEmitter
         return list;
     }
 
-    static IReadOnlyList<object> BuildProperties(Table table, HashSet<string> pkCols, bool isCreate, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
+    static IReadOnlyList<object> BuildProperties(NamedEntity entity, HashSet<string> pkCols, bool isCreate, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
     {
         var result = new List<object>();
-        foreach (var c in table.Columns)
+        foreach (var c in entity.Table.Columns)
         {
+            // Drop columns flagged Ignored in artect.yaml columnMetadata.
+            if (entity.ColumnHasFlag(c.Name, ColumnMetadata.Ignored)) continue;
             // For Create requests skip server-generated / identity PK columns
             if (isCreate && pkCols.Contains(c.Name) && c.IsServerGenerated) continue;
 

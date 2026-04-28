@@ -34,6 +34,12 @@ public sealed class EntityConfigurationsEmitter : IEmitter
         var list = new List<EmittedFile>();
         foreach (var entity in ctx.Model.Entities)
         {
+            if (entity.ShouldSkip(
+                EntityClassification.AggregateRoot,
+                EntityClassification.OwnedEntity,
+                EntityClassification.ReadModel,
+                EntityClassification.LookupData,
+                EntityClassification.JoinTable)) continue;
             var typeName = entity.EntityTypeName;
             var typeRef = collidedEntityNames.Contains(typeName)
                 ? $"{entityNs}.{typeName}"
@@ -111,8 +117,12 @@ public sealed class EntityConfigurationsEmitter : IEmitter
         // Column mappings
         foreach (var col in table.Columns)
         {
+            if (entity.ColumnHasFlag(col.Name, ColumnMetadata.Ignored)) continue;
             var prop = EntityNaming.PropertyName(col, corrections);
-            sb.AppendLine($"        builder.Property(e => e.{prop}).HasColumnName(\"{col.Name}\");");
+            var line = $"        builder.Property(e => e.{prop}).HasColumnName(\"{col.Name}\")";
+            if (entity.ColumnHasFlag(col.Name, ColumnMetadata.ConcurrencyToken))
+                line += ".IsConcurrencyToken()";
+            sb.AppendLine(line + ";");
         }
 
         // Reference navigations / FK relationships

@@ -44,6 +44,15 @@ public sealed class NewCommand
         var connection2 = ConnectionResolver.Resolve(args, yamlConnection);
         var reader = new SqlServerSchemaReader(new SqlConnectionFactory(connection2));
         var graph = reader.Read(config.Schemas);
+        try
+        {
+            ConfigValidator.Validate(config, graph);
+        }
+        catch (ConfigValidationException ex)
+        {
+            System.Console.Error.WriteLine(ex.Message);
+            return 3;
+        }
         var generator = new Generator(EmitterRegistry.All());
         var outputRoot = Path.GetFullPath(config.OutputDirectory);
         Directory.CreateDirectory(outputRoot);

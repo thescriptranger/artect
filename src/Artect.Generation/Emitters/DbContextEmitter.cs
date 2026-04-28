@@ -58,6 +58,15 @@ public sealed class DbContextEmitter : IEmitter
 
         foreach (var entity in model.Entities)
         {
+            // Mirror EntityEmitter's classification scope so every DbSet<T> has a matching
+            // generated entity class. Owned entities don't normally have a DbSet (V#2 will
+            // refine), but emitting one alongside the entity class keeps the build green
+            // for the V#1 placeholder classification.
+            if (entity.ShouldSkip(
+                EntityClassification.AggregateRoot,
+                EntityClassification.OwnedEntity,
+                EntityClassification.ReadModel,
+                EntityClassification.LookupData)) continue;
             var propertyName = entity.DbSetPropertyName;
             var typeName     = entity.EntityTypeName;
             var typeRef = collidedEntityNames.Contains(typeName)

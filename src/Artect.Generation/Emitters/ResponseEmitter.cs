@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Artect.Config;
 using Artect.Core.Schema;
 using Artect.Naming;
 using Artect.Templating;
@@ -17,10 +18,12 @@ public sealed class ResponseEmitter : IEmitter
 
         foreach (var entity in ctx.Model.Entities)
         {
-            if (entity.IsJoinTable) continue;
-            if (!entity.HasPrimaryKey) continue;
+            if (entity.ShouldSkip(EntityClassification.AggregateRoot)) continue;
 
-            var props = entity.Table.Columns.Select(c =>
+            var props = entity.Table.Columns
+                .Where(c => !entity.ColumnHasFlag(c.Name, ColumnMetadata.Ignored)
+                         && !entity.ColumnHasFlag(c.Name, ColumnMetadata.Sensitive))
+                .Select(c =>
             {
                 var csBase = SqlTypeMap.ToCs(c.ClrType);
                 string clrTypeWithNullability;

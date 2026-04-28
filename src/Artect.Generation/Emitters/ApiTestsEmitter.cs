@@ -36,8 +36,7 @@ public sealed class ApiTestsEmitter : IEmitter
 
         foreach (var entity in ctx.Model.Entities)
         {
-            if (entity.IsJoinTable) continue;
-            if (!entity.HasPrimaryKey) continue;
+            if (entity.ShouldSkip(EntityClassification.AggregateRoot)) continue;
 
             var plural = entity.DbSetPropertyName;
             var route = CasingHelper.ToKebabCase(plural, ctx.NamingCorrections);

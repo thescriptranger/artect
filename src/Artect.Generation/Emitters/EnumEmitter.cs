@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using Artect.Config;
 using Artect.Naming;
 using Artect.Templating;
 
@@ -26,6 +27,7 @@ public sealed class EnumEmitter : IEmitter
 
         foreach (var entity in ctx.Model.Entities)
         {
+            if (entity.Classification == EntityClassification.Ignored) continue;
             foreach (var ck in entity.Table.CheckConstraints)
             {
                 var parsed = TryParseInList(ck.Expression);

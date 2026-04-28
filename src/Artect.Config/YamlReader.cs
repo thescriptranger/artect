@@ -23,7 +23,7 @@ public static class YamlReader
             "generatedByLabel","generateInitialMigration","crud","apiVersioning","auth",
             "includeTestsProject","includeDockerAssets","partitionStoredProceduresBySchema",
             "includeChildCollectionsInResponses","validateForeignKeyReferences","schemas","connectionString",
-            "namingCorrections"
+            "namingCorrections","tableClassifications","columnMetadata"
         };
         foreach (var k in values.Keys)
             if (!knownKeys.Contains(k)) throw new YamlException($"Unknown key '{k}' in artect.yaml.");
@@ -49,7 +49,51 @@ public static class YamlReader
             IncludeChildCollectionsInResponses: ParseBool(Require("includeChildCollectionsInResponses")),
             ValidateForeignKeyReferences: ParseBool(Require("validateForeignKeyReferences")),
             Schemas: ParseStringList(Require("schemas")),
-            NamingCorrections: values.TryGetValue("namingCorrections", out var nc) ? ParseMap(nc) : new Dictionary<string, string>());
+            NamingCorrections: values.TryGetValue("namingCorrections", out var nc) ? ParseMap(nc) : new Dictionary<string, string>(),
+            TableClassifications: values.TryGetValue("tableClassifications", out var tc) ? ParseClassifications(tc) : new Dictionary<string, EntityClassification>(),
+            ColumnMetadata: values.TryGetValue("columnMetadata", out var cm) ? ParseColumnMetadata(cm) : new Dictionary<string, IReadOnlyDictionary<string, ColumnMetadata>>());
+    }
+
+    static IReadOnlyDictionary<string, EntityClassification> ParseClassifications(string s)
+    {
+        var raw = ParseMap(s);
+        var result = new Dictionary<string, EntityClassification>(StringComparer.Ordinal);
+        foreach (var kv in raw)
+        {
+            if (!Enum.TryParse<EntityClassification>(kv.Value.Trim(), ignoreCase: true, out var cls))
+                throw new YamlException($"Invalid classification '{kv.Value}' for table '{kv.Key}'. Allowed: AggregateRoot, OwnedEntity, ReadModel, LookupData, JoinTable, Ignored.");
+            result[kv.Key] = cls;
+        }
+        return result;
+    }
+
+    static IReadOnlyDictionary<string, IReadOnlyDictionary<string, ColumnMetadata>> ParseColumnMetadata(string s)
+    {
+        // Format: keys are "Table.Column"; values are comma-separated ColumnMetadata flags.
+        // The hand-rolled parser only handles one indent level, so column-metadata uses dotted keys
+        // instead of nested maps. (Documented in docs/violations-context.md.)
+        var raw = ParseMap(s);
+        var result = new Dictionary<string, Dictionary<string, ColumnMetadata>>(StringComparer.Ordinal);
+        foreach (var kv in raw)
+        {
+            var dot = kv.Key.IndexOf('.');
+            if (dot <= 0 || dot == kv.Key.Length - 1)
+                throw new YamlException($"Invalid columnMetadata key '{kv.Key}'. Expected 'Table.Column'.");
+            var table = kv.Key.Substring(0, dot).Trim();
+            var column = kv.Key.Substring(dot + 1).Trim();
+            if (!Enum.TryParse<ColumnMetadata>(kv.Value.Trim(), ignoreCase: true, out var flags))
+                throw new YamlException($"Invalid columnMetadata value '{kv.Value}' for '{kv.Key}'. Allowed flags: Ignored, ProtectedFromUpdate, ConcurrencyToken, Audit, Sensitive (comma-separated).");
+            if (!result.TryGetValue(table, out var inner))
+            {
+                inner = new Dictionary<string, ColumnMetadata>(StringComparer.Ordinal);
+                result[table] = inner;
+            }
+            inner[column] = flags;
+        }
+        return result.ToDictionary(
+            x => x.Key,
+            x => (IReadOnlyDictionary<string, ColumnMetadata>)x.Value,
+            StringComparer.Ordinal);
     }
 
     static Dictionary<string, string> Parse(string content)

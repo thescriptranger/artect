@@ -28,8 +28,7 @@ public sealed class RepositoryInterfaceEmitter : IEmitter
 
         foreach (var entity in ctx.Model.Entities)
         {
-            if (entity.IsJoinTable) continue;
-            if (!entity.HasPrimaryKey) continue;
+            if (entity.ShouldSkip(EntityClassification.AggregateRoot)) continue;
 
             var name   = entity.EntityTypeName;
             var ns     = CleanLayout.ApplicationFeatureAbstractionsNamespace(project, name);

@@ -38,8 +38,7 @@ public sealed class InfrastructureTestsEmitter : IEmitter
 
         foreach (var entity in ctx.Model.Entities)
         {
-            if (entity.IsJoinTable) continue;
-            if (!entity.HasPrimaryKey) continue;
+            if (entity.ShouldSkip(EntityClassification.AggregateRoot)) continue;
 
             if (emitRepoTests) list.Add(BuildRepositoryTests(ctx, testsDir, entity));
             if (emitReadTests) list.Add(BuildReadServiceTests(ctx, testsDir, entity));

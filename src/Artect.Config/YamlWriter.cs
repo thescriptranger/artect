@@ -37,7 +37,32 @@ public static class YamlWriter
             foreach (var kv in cfg.NamingCorrections.OrderBy(k => k.Key, StringComparer.Ordinal))
                 sb.AppendLine($"  {kv.Key}: {kv.Value}");
         }
+        if (cfg.TableClassifications.Count > 0)
+        {
+            sb.AppendLine("tableClassifications:");
+            foreach (var kv in cfg.TableClassifications.OrderBy(k => k.Key, StringComparer.Ordinal))
+                sb.AppendLine($"  {kv.Key}: {kv.Value}");
+        }
+        if (cfg.ColumnMetadata.Count > 0)
+        {
+            sb.AppendLine("columnMetadata:");
+            foreach (var t in cfg.ColumnMetadata.OrderBy(k => k.Key, StringComparer.Ordinal))
+                foreach (var c in t.Value.OrderBy(k => k.Key, StringComparer.Ordinal))
+                    sb.AppendLine($"  {t.Key}.{c.Key}: {FlagsString(c.Value)}");
+        }
         return sb.ToString();
+    }
+
+    static string FlagsString(ColumnMetadata flags)
+    {
+        if (flags == ColumnMetadata.None) return nameof(ColumnMetadata.None);
+        var parts = new List<string>();
+        foreach (ColumnMetadata v in Enum.GetValues(typeof(ColumnMetadata)))
+        {
+            if (v == ColumnMetadata.None) continue;
+            if (flags.HasFlag(v)) parts.Add(v.ToString());
+        }
+        return string.Join(", ", parts);
     }
 
     static string Bool(bool b) => b ? "true" : "false";

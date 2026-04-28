@@ -18,7 +18,7 @@ public sealed class Generator
 
     public void Generate(ArtectConfig cfg, SchemaGraph graph, string outputRoot, string? connectionString = null)
     {
-        var model = NamedSchemaModel.Build(graph);
+        var model = NamedSchemaModel.Build(graph, cfg.TableClassifications, cfg.ColumnMetadata);
         var templateAssembly = typeof(Artect.Templates.TemplatesMarker).Assembly;
         var loader = new TemplateLoader(templateAssembly, "Artect.Templates.Files");
         var ctx = new EmitterContext(cfg, graph, model, loader, connectionString);

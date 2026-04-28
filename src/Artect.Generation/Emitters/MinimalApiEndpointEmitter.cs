@@ -23,8 +23,7 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
 
         foreach (var entity in ctx.Model.Entities)
         {
-            if (entity.IsJoinTable) continue;
-            if (!entity.HasPrimaryKey) continue;
+            if (entity.ShouldSkip(EntityClassification.AggregateRoot)) continue;
 
             var pluralPascal = CasingHelper.ToPascalCase(
                 Pluralizer.Pluralize(entity.EntityTypeName), corrections);

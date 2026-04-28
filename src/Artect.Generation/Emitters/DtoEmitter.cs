@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Artect.Config;
 using Artect.Core.Schema;
 using Artect.Templating;
 
@@ -13,8 +14,7 @@ public sealed class DtoEmitter : IEmitter
         var list = new List<EmittedFile>();
         foreach (var entity in ctx.Model.Entities)
         {
-            if (entity.IsJoinTable) continue;
-            if (!entity.HasPrimaryKey) continue;
+            if (entity.ShouldSkip(EntityClassification.AggregateRoot, EntityClassification.ReadModel)) continue;
             var data = new
             {
                 Namespace = $"{CleanLayout.ApplicationNamespace(ctx.Config.ProjectName)}.Dtos",

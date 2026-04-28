@@ -25,8 +25,7 @@ public sealed class ReadServiceEmitter : IEmitter
         var list = new List<EmittedFile>();
         foreach (var entity in ctx.Model.Entities)
         {
-            if (entity.IsJoinTable) continue;
-            if (!entity.HasPrimaryKey) continue;
+            if (entity.ShouldSkip(EntityClassification.AggregateRoot, EntityClassification.ReadModel)) continue;
             list.Add(Build(ctx, entity));
         }
         return list;

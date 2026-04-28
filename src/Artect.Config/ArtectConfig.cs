@@ -19,7 +19,9 @@ public sealed record ArtectConfig(
     bool IncludeChildCollectionsInResponses,
     bool ValidateForeignKeyReferences,
     IReadOnlyList<string> Schemas,
-    IReadOnlyDictionary<string, string> NamingCorrections)
+    IReadOnlyDictionary<string, string> NamingCorrections,
+    IReadOnlyDictionary<string, EntityClassification> TableClassifications,
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, ColumnMetadata>> ColumnMetadata)
 {
     public static ArtectConfig Defaults() => new(
         ProjectName: "MyApi",
@@ -38,5 +40,7 @@ public sealed record ArtectConfig(
         IncludeChildCollectionsInResponses: false,
         ValidateForeignKeyReferences: false,
         Schemas: new[] { "dbo" },
-        NamingCorrections: new Dictionary<string, string>());
+        NamingCorrections: new Dictionary<string, string>(),
+        TableClassifications: new Dictionary<string, EntityClassification>(),
+        ColumnMetadata: new Dictionary<string, IReadOnlyDictionary<string, ColumnMetadata>>());
 }

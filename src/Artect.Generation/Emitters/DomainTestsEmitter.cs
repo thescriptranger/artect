@@ -28,8 +28,7 @@ public sealed class DomainTestsEmitter : IEmitter
 
         foreach (var entity in ctx.Model.Entities)
         {
-            if (entity.IsJoinTable) continue;
-            if (!entity.HasPrimaryKey) continue;
+            if (entity.ShouldSkip(EntityClassification.AggregateRoot, EntityClassification.OwnedEntity, EntityClassification.ReadModel, EntityClassification.LookupData)) continue;
             list.Add(BuildEntityTests(ctx, testsDir, entity));
         }
         return list;

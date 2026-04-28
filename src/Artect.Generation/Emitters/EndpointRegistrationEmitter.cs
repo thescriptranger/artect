@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Artect.Config;
 using Artect.Naming;
 
 namespace Artect.Generation.Emitters;
@@ -13,7 +14,7 @@ public sealed class EndpointRegistrationEmitter : IEmitter
         var corrections = ctx.NamingCorrections;
 
         var entities = ctx.Model.Entities
-            .Where(e => !e.IsJoinTable && e.HasPrimaryKey)
+            .Where(e => !e.ShouldSkip(EntityClassification.AggregateRoot))
             .OrderBy(e => e.EntityTypeName, System.StringComparer.Ordinal)
             .ToList();
 

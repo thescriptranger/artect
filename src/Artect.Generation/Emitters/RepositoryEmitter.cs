@@ -26,8 +26,7 @@ public sealed class RepositoryEmitter : IEmitter
         var list = new List<EmittedFile>();
         foreach (var entity in ctx.Model.Entities)
         {
-            if (entity.IsJoinTable) continue;
-            if (!entity.HasPrimaryKey) continue;
+            if (entity.ShouldSkip(EntityClassification.AggregateRoot)) continue;
             list.Add(Build(ctx, entity));
         }
         return list;

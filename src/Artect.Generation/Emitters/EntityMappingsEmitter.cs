@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Artect.Config;
 using Artect.Core.Schema;
 using Artect.Naming;
 
@@ -20,8 +21,7 @@ public sealed class EntityMappingsEmitter : IEmitter
 
         foreach (var entity in ctx.Model.Entities)
         {
-            if (entity.IsJoinTable) continue;
-            if (!entity.HasPrimaryKey) continue;
+            if (entity.ShouldSkip(EntityClassification.AggregateRoot, EntityClassification.ReadModel)) continue;
 
             var name = entity.EntityTypeName;
             var sb = new StringBuilder();

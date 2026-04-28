@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Artect.Config;
 using Artect.Core.Schema;
 
 namespace Artect.Naming;
@@ -10,4 +11,6 @@ public sealed record NamedEntity(
     IReadOnlyList<NamedNavigation> ReferenceNavigations,
     IReadOnlyList<NamedNavigation> CollectionNavigations,
     bool IsJoinTable,
-    bool HasPrimaryKey);
+    bool HasPrimaryKey,
+    EntityClassification Classification,
+    IReadOnlyDictionary<string, ColumnMetadata> ColumnMetadata);

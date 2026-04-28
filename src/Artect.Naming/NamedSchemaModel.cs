@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Artect.Config;
 using Artect.Core.Schema;
 
 namespace Artect.Naming;
@@ -17,14 +18,24 @@ public sealed class NamedSchemaModel
         DbSets = dbSets;
     }
 
-    public static NamedSchemaModel Build(SchemaGraph graph)
+    public static NamedSchemaModel Build(SchemaGraph graph) => Build(graph, null, null);
+
+    public static NamedSchemaModel Build(
+        SchemaGraph graph,
+        IReadOnlyDictionary<string, EntityClassification>? tableClassifications,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, ColumnMetadata>>? columnMetadata)
     {
         var dbSets = DbSetNaming.Build(graph);
         var entities = new List<NamedEntity>(graph.Tables.Count);
+        var emptyColMeta = (IReadOnlyDictionary<string, ColumnMetadata>)new Dictionary<string, ColumnMetadata>();
         foreach (var t in graph.Tables)
         {
             var typeName = dbSets.EntityTypeNames[(t.Schema, t.Name)];
             var dbSetName = dbSets.DbSetNames[(t.Schema, t.Name)];
+            var classification = EntityClassifier.Classify(t, tableClassifications);
+            var colMeta = columnMetadata is not null && columnMetadata.TryGetValue(t.Name, out var m)
+                ? m
+                : emptyColMeta;
             entities.Add(new NamedEntity(
                 Table: t,
                 EntityTypeName: typeName,
@@ -32,7 +43,9 @@ public sealed class NamedSchemaModel
                 ReferenceNavigations: BuildReferenceNavigations(t, dbSets),
                 CollectionNavigations: BuildCollectionNavigations(t, graph, dbSets),
                 IsJoinTable: JoinTableDetector.IsJoinTable(t),
-                HasPrimaryKey: t.PrimaryKey is not null));
+                HasPrimaryKey: t.PrimaryKey is not null,
+                Classification: classification,
+                ColumnMetadata: colMeta));
         }
         return new NamedSchemaModel(graph, entities, dbSets);
     }

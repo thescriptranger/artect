@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Artect.Config;
 using Artect.Core.Schema;
 using Artect.Naming;
 using Artect.Templating;
@@ -21,8 +22,7 @@ public sealed class MapperEmitter : IEmitter
 
         foreach (var entity in ctx.Model.Entities)
         {
-            if (entity.IsJoinTable) continue;
-            if (!entity.HasPrimaryKey) continue;
+            if (entity.ShouldSkip(EntityClassification.AggregateRoot, EntityClassification.ReadModel)) continue;
 
             var pkCols = entity.Table.PrimaryKey!.ColumnNames
                 .ToHashSet(System.StringComparer.OrdinalIgnoreCase);

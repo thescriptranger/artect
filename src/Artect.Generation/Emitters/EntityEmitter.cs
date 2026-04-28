@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Artect.Config;
 using Artect.Core.Schema;
 using Artect.Naming;
 using Artect.Templating;
@@ -15,8 +16,7 @@ public sealed class EntityEmitter : IEmitter
         var list = new List<EmittedFile>();
         foreach (var entity in ctx.Model.Entities)
         {
-            if (entity.IsJoinTable) continue;
-            if (!entity.HasPrimaryKey) continue;
+            if (entity.ShouldSkip(EntityClassification.AggregateRoot, EntityClassification.OwnedEntity, EntityClassification.ReadModel, EntityClassification.LookupData)) continue;
             var data = BuildData(ctx, entity);
             var rendered = Renderer.Render(template, data);
             var path = CleanLayout.EntityPath(ctx.Config.ProjectName, entity.EntityTypeName);
@@ -28,7 +28,10 @@ public sealed class EntityEmitter : IEmitter
     static object BuildData(EmitterContext ctx, NamedEntity entity)
     {
         var corrections = ctx.NamingCorrections;
-        var factoryArgs = entity.Table.Columns
+        var visibleColumns = entity.Table.Columns
+            .Where(c => !entity.ColumnHasFlag(c.Name, ColumnMetadata.Ignored))
+            .ToList();
+        var factoryArgs = visibleColumns
             .Where(c => !c.IsServerGenerated)
             .ToList();
 
@@ -77,7 +80,7 @@ public sealed class EntityEmitter : IEmitter
             Namespace = $"{CleanLayout.DomainNamespace(ctx.Config.ProjectName)}.Entities",
             DomainCommonNamespace = CleanLayout.DomainCommonNamespace(ctx.Config.ProjectName),
             EntityName = entity.EntityTypeName,
-            Columns = entity.Table.Columns.Select(c => new
+            Columns = visibleColumns.Select(c => new
             {
                 ClrTypeWithNullability = ClrTypeString(c),
                 PropertyName = Artect.Naming.EntityNaming.PropertyName(c, corrections),

@@ -14,7 +14,8 @@ public sealed class ApplicationDiEmitter : IEmitter
         var anyWrite = (crud & (CrudOperation.Post | CrudOperation.Put | CrudOperation.Patch | CrudOperation.Delete)) != 0;
 
         var ns = CleanLayout.ApplicationNamespace(project);
-        var entities = ctx.Model.Entities.Where(e => !e.IsJoinTable && e.HasPrimaryKey)
+        var entities = ctx.Model.Entities
+            .Where(e => !e.ShouldSkip(EntityClassification.AggregateRoot))
             .OrderBy(e => e.EntityTypeName, System.StringComparer.Ordinal)
             .ToList();
 

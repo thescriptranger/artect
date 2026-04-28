@@ -24,8 +24,16 @@ public sealed class InfrastructureDiEmitter : IEmitter
         sb.AppendLine($"using {dataNs};");
         sb.AppendLine($"using {appAbsNs};");
 
-        var entities = ctx.Model.Entities.Where(e => !e.IsJoinTable && e.HasPrimaryKey).ToList();
-        foreach (var entity in entities.OrderBy(e => e.EntityTypeName, System.StringComparer.Ordinal))
+        var repoEntities = ctx.Model.Entities
+            .Where(e => !e.ShouldSkip(EntityClassification.AggregateRoot))
+            .ToList();
+        var readServiceEntities = ctx.Model.Entities
+            .Where(e => !e.ShouldSkip(EntityClassification.AggregateRoot, EntityClassification.ReadModel))
+            .ToList();
+        var diEntities = repoEntities.Union(readServiceEntities)
+            .OrderBy(e => e.EntityTypeName, System.StringComparer.Ordinal)
+            .ToList();
+        foreach (var entity in diEntities)
         {
             sb.AppendLine($"using {CleanLayout.InfrastructureDataEntityNamespace(project, entity.EntityTypeName)};");
             sb.AppendLine($"using {CleanLayout.ApplicationFeatureAbstractionsNamespace(project, entity.EntityTypeName)};");
@@ -48,10 +56,15 @@ public sealed class InfrastructureDiEmitter : IEmitter
         sb.AppendLine("        services.AddScoped<IUnitOfWork, EfUnitOfWork>();");
         sb.AppendLine();
 
-        foreach (var entity in entities.OrderBy(e => e.EntityTypeName, System.StringComparer.Ordinal))
+        foreach (var entity in repoEntities.OrderBy(e => e.EntityTypeName, System.StringComparer.Ordinal))
         {
             var name = entity.EntityTypeName;
             sb.AppendLine($"        services.AddScoped<I{name}Repository, {name}Repository>();");
+        }
+
+        foreach (var entity in readServiceEntities.OrderBy(e => e.EntityTypeName, System.StringComparer.Ordinal))
+        {
+            var name = entity.EntityTypeName;
             sb.AppendLine($"        services.AddScoped<I{name}ReadService, {name}ReadService>();");
         }
 

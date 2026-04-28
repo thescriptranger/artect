@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Artect.Config;
 using Artect.Core.Schema;
 using Artect.Naming;
 using Artect.Templating;
@@ -22,8 +23,7 @@ public sealed class EntityDtoEmitter : IEmitter
 
         foreach (var entity in ctx.Model.Entities)
         {
-            if (entity.IsJoinTable) continue;
-            if (!entity.HasPrimaryKey) continue;
+            if (entity.ShouldSkip(EntityClassification.AggregateRoot, EntityClassification.ReadModel)) continue;
 
             var childCollections = includeChildren
                 ? entity.CollectionNavigations
@@ -35,11 +35,15 @@ public sealed class EntityDtoEmitter : IEmitter
                     .ToList()
                 : new();
 
+            var visibleColumns = entity.Table.Columns
+                .Where(c => !entity.ColumnHasFlag(c.Name, ColumnMetadata.Ignored)
+                         && !entity.ColumnHasFlag(c.Name, ColumnMetadata.Sensitive))
+                .ToList();
             var data = new
             {
                 Namespace = CleanLayout.ApplicationDtosNamespace(ctx.Config.ProjectName),
                 EntityName = entity.EntityTypeName,
-                Columns = entity.Table.Columns.Select(c => new
+                Columns = visibleColumns.Select(c => new
                 {
                     ClrTypeWithNullability = ClrTypeString(c),
                     PropertyName = Artect.Naming.EntityNaming.PropertyName(c, ctx.NamingCorrections),
