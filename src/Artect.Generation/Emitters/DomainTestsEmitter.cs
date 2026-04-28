@@ -93,9 +93,26 @@ public sealed class DomainTestsEmitter : IEmitter
         sb.AppendLine($"        result.Should().BeOfType<Result<{e}>.Success>();");
         sb.AppendLine("    }");
 
+        // Update behavior — only for AggregateRoot/OwnedEntity with at least one mutable column.
+        if (entity.EmitsBehavior() && entity.UpdateableColumns().Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("    [Fact]");
+            sb.AppendLine("    public void Update_succeeds_with_minimal_valid_input()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        var createResult = {e}.Create({BuildCreateArgs(entity)});");
+            sb.AppendLine($"        var instance = ((Result<{e}>.Success)createResult).Value;");
+            sb.AppendLine($"        var updateResult = instance.Update({BuildUpdateArgs(entity)});");
+            sb.AppendLine($"        updateResult.Should().BeOfType<Result<{e}>.Success>();");
+            sb.AppendLine("    }");
+        }
+
         sb.AppendLine("}");
         return new EmittedFile($"{testsDir}/Entities/{e}Tests.cs", sb.ToString());
     }
+
+    static string BuildUpdateArgs(NamedEntity entity) =>
+        string.Join(", ", entity.UpdateableColumns().Select(ValidPlaceholder));
 
     static string BuildCreateArgs(NamedEntity entity, string? failingCol = null)
     {

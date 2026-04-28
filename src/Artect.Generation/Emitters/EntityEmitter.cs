@@ -28,42 +28,17 @@ public sealed class EntityEmitter : IEmitter
     static object BuildData(EmitterContext ctx, NamedEntity entity)
     {
         var corrections = ctx.NamingCorrections;
+        var commonNs = CleanLayout.DomainCommonNamespace(ctx.Config.ProjectName);
         var visibleColumns = entity.Table.Columns
             .Where(c => !entity.ColumnHasFlag(c.Name, ColumnMetadata.Ignored))
             .ToList();
         var factoryArgs = visibleColumns
             .Where(c => !c.IsServerGenerated)
             .ToList();
+        var updateArgs = entity.UpdateableColumns();
 
-        var invariantLines = new List<string>();
-        var commonNs = CleanLayout.DomainCommonNamespace(ctx.Config.ProjectName);
-        foreach (var col in factoryArgs)
-        {
-            var paramName = Artect.Naming.CasingHelper.ToCamelCase(col.Name, corrections);
-            if (!col.IsNullable && col.ClrType == ClrType.String)
-            {
-                invariantLines.Add($"if (string.IsNullOrWhiteSpace({paramName})) errors.Add(new {commonNs}.DomainError(\"{paramName}\", \"required\", \"{col.Name} is required.\"));");
-            }
-            if (col.ClrType == ClrType.String && col.MaxLength is int max && max > 0)
-            {
-                invariantLines.Add($"if ({paramName} is {{ Length: > {max} }}) errors.Add(new {commonNs}.DomainError(\"{paramName}\", \"maxLength\", \"{col.Name} must be at most {max} characters.\"));");
-            }
-            if (!col.IsNullable && col.ClrType == ClrType.Guid)
-            {
-                invariantLines.Add($"if ({paramName} == System.Guid.Empty) errors.Add(new {commonNs}.DomainError(\"{paramName}\", \"required\", \"{col.Name} is required.\"));");
-            }
-        }
-
-        // Paired created-/updated-timestamp check: if both a "Created*" and "Updated*" column
-        // are present in the factory args and both are date-typed, emit Updated >= Created.
-        var createdCol = factoryArgs.FirstOrDefault(c => IsDateLike(c) && IsCreatedTimestampName(c.Name));
-        var updatedCol = factoryArgs.FirstOrDefault(c => IsDateLike(c) && IsUpdatedTimestampName(c.Name));
-        if (createdCol is not null && updatedCol is not null)
-        {
-            var createdParam = Artect.Naming.CasingHelper.ToCamelCase(createdCol.Name, corrections);
-            var updatedParam = Artect.Naming.CasingHelper.ToCamelCase(updatedCol.Name, corrections);
-            invariantLines.Add($"if ({updatedParam} < {createdParam}) errors.Add(new {commonNs}.DomainError(\"{updatedParam}\", \"invalid_date\", \"{updatedCol.Name} cannot be before {createdCol.Name}.\"));");
-        }
+        var invariantLines = BuildInvariants(factoryArgs, corrections, commonNs);
+        var updateInvariantLines = BuildInvariants(updateArgs, corrections, commonNs);
 
         var createArgs = factoryArgs.Select((c, i) => new
         {
@@ -73,13 +48,26 @@ public sealed class EntityEmitter : IEmitter
             Comma = i < factoryArgs.Count - 1 ? "," : "",
         }).ToList();
 
+        var updateArgsForTemplate = updateArgs.Select((c, i) => new
+        {
+            ClrTypeWithNullability = ClrTypeString(c),
+            ParamName = Artect.Naming.CasingHelper.ToCamelCase(c.Name, corrections),
+            PropertyName = Artect.Naming.EntityNaming.PropertyName(c, corrections),
+            Comma = i < updateArgs.Count - 1 ? "," : "",
+        }).ToList();
+
+        var emitBehavior = entity.EmitsBehavior();
+
         return new
         {
             HasUsingNamespaces = false,
             UsingNamespaces = Array.Empty<string>(),
             Namespace = $"{CleanLayout.DomainNamespace(ctx.Config.ProjectName)}.Entities",
-            DomainCommonNamespace = CleanLayout.DomainCommonNamespace(ctx.Config.ProjectName),
+            DomainCommonNamespace = commonNs,
             EntityName = entity.EntityTypeName,
+            EmitBehavior = emitBehavior,
+            SetterModifier = emitBehavior ? "private set" : "init",
+            EmitUpdateMethod = emitBehavior && updateArgs.Count > 0,
             Columns = visibleColumns.Select(c => new
             {
                 ClrTypeWithNullability = ClrTypeString(c),
@@ -101,7 +89,39 @@ public sealed class EntityEmitter : IEmitter
             }).ToList(),
             CreateArgs = createArgs,
             Invariants = invariantLines.Select(l => new { Line = l }).ToList(),
+            UpdateArgs = updateArgsForTemplate,
+            UpdateInvariants = updateInvariantLines.Select(l => new { Line = l }).ToList(),
         };
+    }
+
+    static List<string> BuildInvariants(
+        IReadOnlyList<Column> args,
+        IReadOnlyDictionary<string, string> corrections,
+        string commonNs)
+    {
+        var lines = new List<string>();
+        foreach (var col in args)
+        {
+            var paramName = Artect.Naming.CasingHelper.ToCamelCase(col.Name, corrections);
+            if (!col.IsNullable && col.ClrType == ClrType.String)
+                lines.Add($"if (string.IsNullOrWhiteSpace({paramName})) errors.Add(new {commonNs}.DomainError(\"{paramName}\", \"required\", \"{col.Name} is required.\"));");
+            if (col.ClrType == ClrType.String && col.MaxLength is int max && max > 0)
+                lines.Add($"if ({paramName} is {{ Length: > {max} }}) errors.Add(new {commonNs}.DomainError(\"{paramName}\", \"maxLength\", \"{col.Name} must be at most {max} characters.\"));");
+            if (!col.IsNullable && col.ClrType == ClrType.Guid)
+                lines.Add($"if ({paramName} == System.Guid.Empty) errors.Add(new {commonNs}.DomainError(\"{paramName}\", \"required\", \"{col.Name} is required.\"));");
+        }
+
+        // Paired created-/updated-timestamp check: if both a "Created*" and "Updated*" column
+        // are present in the args and both are date-typed, emit Updated >= Created.
+        var createdCol = args.FirstOrDefault(c => IsDateLike(c) && IsCreatedTimestampName(c.Name));
+        var updatedCol = args.FirstOrDefault(c => IsDateLike(c) && IsUpdatedTimestampName(c.Name));
+        if (createdCol is not null && updatedCol is not null)
+        {
+            var createdParam = Artect.Naming.CasingHelper.ToCamelCase(createdCol.Name, corrections);
+            var updatedParam = Artect.Naming.CasingHelper.ToCamelCase(updatedCol.Name, corrections);
+            lines.Add($"if ({updatedParam} < {createdParam}) errors.Add(new {commonNs}.DomainError(\"{updatedParam}\", \"invalid_date\", \"{updatedCol.Name} cannot be before {createdCol.Name}.\"));");
+        }
+        return lines;
     }
 
     static string ClrTypeString(Column c)

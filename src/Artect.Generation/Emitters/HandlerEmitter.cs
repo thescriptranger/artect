@@ -29,14 +29,19 @@ public sealed class HandlerEmitter : IEmitter
 
             var name         = entity.EntityTypeName;
             var nonServerGen = entity.Table.Columns.Where(c => !c.IsServerGenerated).ToList();
-            var allCols      = entity.Table.Columns.ToList();
 
             if ((crud & CrudOperation.Post) != 0)
                 list.Add(BuildCreate(ctx, entity, name, nonServerGen));
             if ((crud & CrudOperation.Put) != 0)
-                list.Add(BuildUpdate(ctx, entity, name, allCols, "Update"));
+            {
+                var f = BuildUpdate(ctx, entity, name, "Update");
+                if (f is not null) list.Add(f);
+            }
             if ((crud & CrudOperation.Patch) != 0)
-                list.Add(BuildUpdate(ctx, entity, name, allCols, "Patch"));
+            {
+                var f = BuildUpdate(ctx, entity, name, "Patch");
+                if (f is not null) list.Add(f);
+            }
             if ((crud & CrudOperation.Delete) != 0)
                 list.Add(BuildDelete(ctx, entity, name));
         }
@@ -104,8 +109,13 @@ public sealed class HandlerEmitter : IEmitter
         return new EmittedFile(path, sb.ToString());
     }
 
-    static EmittedFile BuildUpdate(EmitterContext ctx, NamedEntity entity, string name, IReadOnlyList<Column> allCols, string verb)
+    static EmittedFile? BuildUpdate(EmitterContext ctx, NamedEntity entity, string name, string verb)
     {
+        var updateArgs = entity.UpdateableColumns();
+        // No mutable columns -> no Update method on the entity -> no handler. V#5 will revisit
+        // for PATCH-with-Optional<T>; for now PATCH and PUT share this code path.
+        if (updateArgs.Count == 0) return null;
+
         var project = ctx.Config.ProjectName;
         var corrections = ctx.NamingCorrections;
 
@@ -117,6 +127,7 @@ public sealed class HandlerEmitter : IEmitter
 
         var ns         = CleanLayout.ApplicationFeatureNamespace(project, name);
         var entityNs   = $"{CleanLayout.DomainNamespace(project)}.Entities";
+        var domainNs   = CleanLayout.DomainCommonNamespace(project);
         var dtosNs     = CleanLayout.ApplicationDtosNamespace(project);
         var absNs      = CleanLayout.ApplicationFeatureAbstractionsNamespace(project, name);
         var appAbsNs   = CleanLayout.ApplicationAbstractionsNamespace(project);
@@ -127,6 +138,7 @@ public sealed class HandlerEmitter : IEmitter
 
         var sb = new StringBuilder();
         sb.AppendLine($"using {entityNs};");
+        sb.AppendLine($"using {domainNs};");
         sb.AppendLine($"using {dtosNs};");
         sb.AppendLine($"using {absNs};");
         sb.AppendLine($"using {appAbsNs};");
@@ -141,17 +153,19 @@ public sealed class HandlerEmitter : IEmitter
         sb.AppendLine($"        var existing = await repository.GetByIdAsync(command.{pkProp}, ct).ConfigureAwait(false);");
         sb.AppendLine("        if (existing is null) return null;");
         sb.AppendLine();
-        sb.AppendLine($"        var replacement = new {name}");
-        sb.AppendLine("        {");
-        foreach (var col in allCols)
+        sb.AppendLine("        OnBeforeUpdate(command, existing);");
+        sb.AppendLine("        var result = existing.Update(");
+        for (int i = 0; i < updateArgs.Count; i++)
         {
+            var col = updateArgs[i];
             var prop = EntityNaming.PropertyName(col, corrections);
-            sb.AppendLine($"            {prop} = command.{prop},");
+            var terminator = i == updateArgs.Count - 1 ? ");" : ",";
+            sb.AppendLine($"            command.{prop}{terminator}");
         }
-        sb.AppendLine("        };");
         sb.AppendLine();
-        sb.AppendLine("        OnBeforeApplyChanges(command, existing, replacement);");
-        sb.AppendLine("        repository.ApplyChanges(existing, replacement);");
+        sb.AppendLine($"        if (result is Result<{name}>.Failure failure)");
+        sb.AppendLine("            throw new DomainValidationException(failure.Errors);");
+        sb.AppendLine();
         sb.AppendLine("        OnBeforeCommit(command, existing);");
         sb.AppendLine("        await unitOfWork.CommitAsync(ct).ConfigureAwait(false);");
         sb.AppendLine("        OnAfterCommit(command, existing);");
@@ -159,7 +173,7 @@ public sealed class HandlerEmitter : IEmitter
         sb.AppendLine($"        return DtoMapper.Map<{name}, {name}Dto>(existing);");
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine($"    partial void OnBeforeApplyChanges({commandType} command, {name} existing, {name} replacement);");
+        sb.AppendLine($"    partial void OnBeforeUpdate({commandType} command, {name} existing);");
         sb.AppendLine($"    partial void OnBeforeCommit({commandType} command, {name} entity);");
         sb.AppendLine($"    partial void OnAfterCommit({commandType} command, {name} entity);");
         sb.AppendLine("}");

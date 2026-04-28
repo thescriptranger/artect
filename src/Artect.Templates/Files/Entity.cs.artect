@@ -8,13 +8,17 @@ namespace {{ Namespace }};
 
 public sealed partial class {{ EntityName }}
 {
+{{# if EmitBehavior }}
+    private {{ EntityName }}() { }
+
+{{/if}}
 {{# for col in Columns }}
-    public {{ col.ClrTypeWithNullability }} {{ col.PropertyName }} { get; init; }{{ col.Initializer }}
+    public {{ col.ClrTypeWithNullability }} {{ col.PropertyName }} { get; {{ SetterModifier }}; }{{ col.Initializer }}
 {{/for}}
 {{# if HasReferenceNavigations }}
 
 {{# for nav in ReferenceNavigations }}
-    public {{ nav.TypeName }}? {{ nav.PropertyName }} { get; init; }
+    public {{ nav.TypeName }}? {{ nav.PropertyName }} { get; {{ SetterModifier }}; }
 {{/for}}
 {{/if}}
 {{# if HasCollectionNavigations }}
@@ -43,4 +47,23 @@ public sealed partial class {{ EntityName }}
 {{/for}}
         });
     }
+{{# if EmitUpdateMethod }}
+
+    public {{ DomainCommonNamespace }}.Result<{{ EntityName }}> Update(
+{{# for arg in UpdateArgs }}
+        {{ arg.ClrTypeWithNullability }} {{ arg.ParamName }}{{ arg.Comma }}
+{{/for}}
+    )
+    {
+        var errors = new System.Collections.Generic.List<{{ DomainCommonNamespace }}.DomainError>();
+{{# for check in UpdateInvariants }}
+        {{ check.Line }}
+{{/for}}
+        if (errors.Count > 0) return new {{ DomainCommonNamespace }}.Result<{{ EntityName }}>.Failure(errors);
+{{# for arg in UpdateArgs }}
+        {{ arg.PropertyName }} = {{ arg.ParamName }};
+{{/for}}
+        return new {{ DomainCommonNamespace }}.Result<{{ EntityName }}>.Success(this);
+    }
+{{/if}}
 }
