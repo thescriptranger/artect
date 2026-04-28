@@ -23,6 +23,7 @@ public static class ConfigOverrides
         PartitionStoredProceduresBySchema = ParseBool(args.Get("partition-sprocs-by-schema"), baseline.PartitionStoredProceduresBySchema),
         IncludeChildCollectionsInResponses = ParseBool(args.Get("child-collections"), baseline.IncludeChildCollectionsInResponses),
         MaxPageSize = args.Get("max-page-size") is { } mps && int.TryParse(mps, out var mpsParsed) && mpsParsed > 0 ? mpsParsed : baseline.MaxPageSize,
+        EnableDomainEvents = ParseBool(args.Get("enable-domain-events"), baseline.EnableDomainEvents),
         Schemas = args.Get("schemas") is { } s ? s.Split(',').Select(x => x.Trim()).ToList() : baseline.Schemas,
     };
 

@@ -21,8 +21,35 @@ public sealed class EntityEmitter : IEmitter
             var rendered = Renderer.Render(template, data);
             var path = CleanLayout.EntityPath(ctx.Config.ProjectName, entity.EntityTypeName);
             list.Add(new EmittedFile(path, rendered));
+
+            if (ctx.Config.EnableDomainEvents && entity.Classification == EntityClassification.AggregateRoot)
+            {
+                list.Add(new EmittedFile(
+                    CleanLayout.EntityDomainEventsPath(ctx.Config.ProjectName, entity.EntityTypeName),
+                    BuildDomainEventsPartial(ctx, entity)));
+            }
         }
         return list;
+    }
+
+    static string BuildDomainEventsPartial(EmitterContext ctx, NamedEntity entity)
+    {
+        var ns = $"{CleanLayout.DomainNamespace(ctx.Config.ProjectName)}.Entities";
+        var commonNs = CleanLayout.DomainCommonNamespace(ctx.Config.ProjectName);
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"namespace {ns};");
+        sb.AppendLine();
+        sb.AppendLine($"public sealed partial class {entity.EntityTypeName} : {commonNs}.IHasDomainEvents");
+        sb.AppendLine("{");
+        sb.AppendLine($"    private readonly System.Collections.Generic.List<{commonNs}.IDomainEvent> _domainEvents = new();");
+        sb.AppendLine();
+        sb.AppendLine($"    public System.Collections.Generic.IReadOnlyCollection<{commonNs}.IDomainEvent> DomainEvents => _domainEvents;");
+        sb.AppendLine();
+        sb.AppendLine("    public void ClearDomainEvents() => _domainEvents.Clear();");
+        sb.AppendLine();
+        sb.AppendLine($"    private void RaiseDomainEvent({commonNs}.IDomainEvent @event) => _domainEvents.Add(@event);");
+        sb.AppendLine("}");
+        return sb.ToString();
     }
 
     static object BuildData(EmitterContext ctx, NamedEntity entity)

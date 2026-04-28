@@ -31,7 +31,10 @@ public sealed class InfrastructureDiEmitter : IEmitter
         // shipped placeholder; users override in their own DI extension method.
         var anyAudit = ctx.Model.Entities.Any(e => e.AnyColumnHasFlag(ColumnMetadata.Audit));
         var anyTenant = ctx.Model.Entities.Any(e => e.AnyColumnHasFlag(ColumnMetadata.TenantId));
-        var hasInterceptor = anyAudit || anyTenant;
+        var hasAuditingInterceptor = anyAudit || anyTenant;
+        var emitDomainEvents = ctx.Config.EnableDomainEvents;
+        var hasInterceptor = hasAuditingInterceptor || emitDomainEvents;
+        var outboxNs = $"{infraNs}.Outbox";
 
         var sb = new StringBuilder();
         sb.AppendLine("using Microsoft.EntityFrameworkCore;");
@@ -43,6 +46,11 @@ public sealed class InfrastructureDiEmitter : IEmitter
             sb.AppendLine($"using {sprocNs};");
         if (hasInterceptor)
             sb.AppendLine($"using {interceptorsNs};");
+        if (emitDomainEvents)
+        {
+            sb.AppendLine($"using {outboxNs};");
+            sb.AppendLine("using Microsoft.Extensions.Hosting;");
+        }
 
         var repoEntities = ctx.Model.Entities
             .Where(e => !e.ShouldSkip(EntityClassification.AggregateRoot))
@@ -82,13 +90,25 @@ public sealed class InfrastructureDiEmitter : IEmitter
         }
         if (hasInterceptor)
         {
-            sb.AppendLine("        // V#12: SaveChanges interceptor centralizes audit + tenant stamping. Scoped");
-            sb.AppendLine("        // because it depends on the request-scoped ITenantContext.");
-            sb.AppendLine("        services.AddScoped<AuditingSaveChangesInterceptor>();");
+            if (hasAuditingInterceptor)
+            {
+                sb.AppendLine("        // V#12: SaveChanges interceptor centralizes audit + tenant stamping. Scoped");
+                sb.AppendLine("        // because it depends on the request-scoped ITenantContext.");
+                sb.AppendLine("        services.AddScoped<AuditingSaveChangesInterceptor>();");
+            }
+            if (emitDomainEvents)
+            {
+                sb.AppendLine("        // V#13: outbox interceptor enrolls pending domain events as OutboxMessage rows");
+                sb.AppendLine("        // in the same transaction as the aggregate write — at-least-once delivery.");
+                sb.AppendLine("        services.AddScoped<DomainEventOutboxInterceptor>();");
+            }
             sb.AppendLine($"        services.AddDbContext<{dbCtx}>((sp, options) =>");
             sb.AppendLine("        {");
             sb.AppendLine("            options.UseSqlServer(connectionString);");
-            sb.AppendLine("            options.AddInterceptors(sp.GetRequiredService<AuditingSaveChangesInterceptor>());");
+            if (hasAuditingInterceptor)
+                sb.AppendLine("            options.AddInterceptors(sp.GetRequiredService<AuditingSaveChangesInterceptor>());");
+            if (emitDomainEvents)
+                sb.AppendLine("            options.AddInterceptors(sp.GetRequiredService<DomainEventOutboxInterceptor>());");
             sb.AppendLine("        });");
         }
         else
@@ -120,6 +140,16 @@ public sealed class InfrastructureDiEmitter : IEmitter
                 sb.AppendLine($"        services.AddScoped<{iface}, {impl}>();");
             foreach (var (iface, impl) in functionPairs)
                 sb.AppendLine($"        services.AddScoped<{iface}, {impl}>();");
+        }
+
+        if (emitDomainEvents)
+        {
+            sb.AppendLine();
+            sb.AppendLine("        // V#13: domain-events publishing pipeline. The default publisher logs only —");
+            sb.AppendLine("        // override the IDomainEventPublisher binding (Service Bus, Kafka, etc.) before");
+            sb.AppendLine("        // production. The dispatcher is a hosted service that drains the outbox table.");
+            sb.AppendLine("        services.AddScoped<IDomainEventPublisher, LoggingDomainEventPublisher>();");
+            sb.AppendLine("        services.AddHostedService<OutboxDispatcher>();");
         }
 
         sb.AppendLine();

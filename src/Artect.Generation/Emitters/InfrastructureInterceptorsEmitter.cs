@@ -22,20 +22,25 @@ public sealed class InfrastructureInterceptorsEmitter : IEmitter
 
         var anyAudit = ctx.Model.Entities.Any(e => e.AnyColumnHasFlag(ColumnMetadata.Audit));
         var anyTenant = ctx.Model.Entities.Any(e => e.AnyColumnHasFlag(ColumnMetadata.TenantId));
-        if (!anyAudit && !anyTenant) return System.Array.Empty<EmittedFile>();
+        var emitDomainEvents = ctx.Config.EnableDomainEvents;
+        if (!anyAudit && !anyTenant && !emitDomainEvents) return System.Array.Empty<EmittedFile>();
 
         var project = ctx.Config.ProjectName;
         var ns = $"{CleanLayout.InfrastructureNamespace(project)}.Interceptors";
         var dir = $"{CleanLayout.InfrastructureDir(project)}/Interceptors";
         var entityNs = $"{CleanLayout.DomainNamespace(project)}.Entities";
         var appAbsNs = CleanLayout.ApplicationAbstractionsNamespace(project);
+        var commonNs = CleanLayout.DomainCommonNamespace(project);
+        var outboxNs = $"{CleanLayout.InfrastructureNamespace(project)}.Outbox";
 
-        var list = new List<EmittedFile>
+        var list = new List<EmittedFile>();
+
+        if (anyAudit || anyTenant)
         {
-            new EmittedFile(
+            list.Add(new EmittedFile(
                 $"{dir}/AuditingSaveChangesInterceptor.cs",
-                BuildInterceptor(ctx, ns, entityNs, appAbsNs, anyTenant)),
-        };
+                BuildInterceptor(ctx, ns, entityNs, appAbsNs, anyTenant)));
+        }
 
         if (anyTenant)
         {
@@ -44,7 +49,82 @@ public sealed class InfrastructureInterceptorsEmitter : IEmitter
                 BuildNoTenantContext(CleanLayout.InfrastructureNamespace(project), appAbsNs)));
         }
 
+        if (emitDomainEvents)
+        {
+            list.Add(new EmittedFile(
+                $"{dir}/DomainEventOutboxInterceptor.cs",
+                BuildDomainEventOutboxInterceptor(ns, commonNs, outboxNs)));
+        }
+
         return list;
+    }
+
+    static string BuildDomainEventOutboxInterceptor(string ns, string commonNs, string outboxNs)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("using System;");
+        sb.AppendLine("using System.Linq;");
+        sb.AppendLine("using System.Text.Json;");
+        sb.AppendLine("using System.Threading;");
+        sb.AppendLine("using System.Threading.Tasks;");
+        sb.AppendLine("using Microsoft.EntityFrameworkCore;");
+        sb.AppendLine("using Microsoft.EntityFrameworkCore.Diagnostics;");
+        sb.AppendLine($"using {commonNs};");
+        sb.AppendLine($"using {outboxNs};");
+        sb.AppendLine();
+        sb.AppendLine($"namespace {ns};");
+        sb.AppendLine();
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine("/// V#13: enrolls pending <see cref=\"IDomainEvent\"/>s from every");
+        sb.AppendLine("/// <see cref=\"IHasDomainEvents\"/> aggregate as <see cref=\"OutboxMessage\"/> rows in the");
+        sb.AppendLine("/// same transaction as the aggregate write — the canonical transactional-outbox");
+        sb.AppendLine("/// pattern. Out-of-band delivery is the dispatcher's job; here we just guarantee");
+        sb.AppendLine("/// no event is lost on commit and no event escapes a rollback.");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine("public sealed class DomainEventOutboxInterceptor : SaveChangesInterceptor");
+        sb.AppendLine("{");
+        sb.AppendLine("    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        Enroll(eventData.Context);");
+        sb.AppendLine("        return base.SavingChangesAsync(eventData, result, cancellationToken);");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        Enroll(eventData.Context);");
+        sb.AppendLine("        return base.SavingChanges(eventData, result);");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    static void Enroll(DbContext? dbContext)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        if (dbContext is null) return;");
+        sb.AppendLine();
+        sb.AppendLine("        var aggregates = dbContext.ChangeTracker");
+        sb.AppendLine("            .Entries<IHasDomainEvents>()");
+        sb.AppendLine("            .Where(e => e.Entity.DomainEvents.Count > 0)");
+        sb.AppendLine("            .Select(e => e.Entity)");
+        sb.AppendLine("            .ToList();");
+        sb.AppendLine();
+        sb.AppendLine("        if (aggregates.Count == 0) return;");
+        sb.AppendLine();
+        sb.AppendLine("        foreach (var aggregate in aggregates)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            foreach (var domainEvent in aggregate.DomainEvents)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                var eventType = domainEvent.GetType();");
+        sb.AppendLine("                dbContext.Add(new OutboxMessage");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    Id = Guid.NewGuid(),");
+        sb.AppendLine("                    OccurredAtUtc = domainEvent.OccurredAtUtc,");
+        sb.AppendLine("                    EventType = eventType.AssemblyQualifiedName ?? eventType.FullName ?? eventType.Name,");
+        sb.AppendLine("                    Payload = JsonSerializer.Serialize(domainEvent, eventType),");
+        sb.AppendLine("                });");
+        sb.AppendLine("            }");
+        sb.AppendLine("            aggregate.ClearDomainEvents();");
+        sb.AppendLine("        }");
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+        return sb.ToString();
     }
 
     static string BuildInterceptor(EmitterContext ctx, string ns, string entityNs, string appAbsNs, bool tenantInjected)

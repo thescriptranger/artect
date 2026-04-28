@@ -40,6 +40,8 @@ public static class EmitterRegistry
         new LaunchSettingsEmitter(),
         new MigrationsEmitter(),
         new MinimalApiEndpointEmitter(),
+        new OutboxEmitter(),
+        new OutboxDispatcherEmitter(),
         new PagedResponseEmitter(),
         new ProductionMiddlewareEmitter(),
         new ProgramCsEmitter(),

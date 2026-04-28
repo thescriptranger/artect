@@ -44,6 +44,8 @@ public sealed class DbContextEmitter : IEmitter
         // filters when at least one entity actually uses TenantId; ditto for soft delete.
         var anyTenant = model.Entities.Any(e => e.AnyColumnHasFlag(ColumnMetadata.TenantId));
         var anySoftDelete = model.Entities.Any(e => e.AnyColumnHasFlag(ColumnMetadata.SoftDeleteFlag));
+        var emitOutbox = ctx.Config.EnableDomainEvents;
+        var outboxNs = $"{CleanLayout.InfrastructureNamespace(project)}.Outbox";
 
         var collidedEntityNames = model.DbSets.EntityTypeNames.Values
             .GroupBy(v => v, System.StringComparer.Ordinal)
@@ -56,6 +58,8 @@ public sealed class DbContextEmitter : IEmitter
         sb.AppendLine($"using {entityNs};");
         if (anyTenant)
             sb.AppendLine($"using {appAbsNs};");
+        if (emitOutbox)
+            sb.AppendLine($"using {outboxNs};");
         sb.AppendLine();
         sb.AppendLine($"namespace {infraNs};");
         sb.AppendLine();
@@ -97,6 +101,14 @@ public sealed class DbContextEmitter : IEmitter
                 ? $"{entityNs}.{typeName}"
                 : typeName;
             sb.AppendLine($"    public DbSet<{typeRef}> {propertyName} => Set<{typeRef}>();");
+        }
+
+        if (emitOutbox)
+        {
+            // V#13: outbox table is a transactional sibling of the aggregate writes —
+            // exposing it as a DbSet keeps the dispatcher LINQ-queryable without dropping
+            // to raw SQL.
+            sb.AppendLine("    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();");
         }
 
         sb.AppendLine();

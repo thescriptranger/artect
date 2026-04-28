@@ -71,6 +71,7 @@ public static class CleanLayout
     public static string ApplicationDtosNamespace(string root) => $"{root}.Application.Dtos";
 
     public static string EntityBehaviorPath(string root, string entityName) => $"{DomainDir(root)}/Entities/{entityName}.Behavior.cs";
+    public static string EntityDomainEventsPath(string root, string entityName) => $"{DomainDir(root)}/Entities/{entityName}.DomainEvents.cs";
 
     public static string ApiNamespace(string root) => $"{root}.Api";
     public static string ApplicationNamespace(string root) => $"{root}.Application";

@@ -28,11 +28,41 @@ public sealed class DomainCommonEmitter : IEmitter
         ex.AppendLine("    public System.Collections.Generic.IReadOnlyList<DomainError> Errors { get; } = errors;");
         ex.AppendLine("}");
 
-        return new[]
+        var files = new List<EmittedFile>
         {
-            new EmittedFile(CleanLayout.DomainCommonPath(project, "Result"), Renderer.Render(result, data)),
-            new EmittedFile(CleanLayout.DomainCommonPath(project, "DomainError"), Renderer.Render(error, data)),
-            new EmittedFile(CleanLayout.DomainCommonPath(project, "DomainValidationException"), ex.ToString()),
+            new(CleanLayout.DomainCommonPath(project, "Result"), Renderer.Render(result, data)),
+            new(CleanLayout.DomainCommonPath(project, "DomainError"), Renderer.Render(error, data)),
+            new(CleanLayout.DomainCommonPath(project, "DomainValidationException"), ex.ToString()),
         };
+
+        if (ctx.Config.EnableDomainEvents)
+        {
+            var ev = new StringBuilder();
+            ev.AppendLine($"namespace {ns};");
+            ev.AppendLine();
+            ev.AppendLine("/// <summary>");
+            ev.AppendLine("/// Marker for a domain event raised by an aggregate. Carries the moment the event occurred.");
+            ev.AppendLine("/// </summary>");
+            ev.AppendLine("public interface IDomainEvent");
+            ev.AppendLine("{");
+            ev.AppendLine("    System.DateTime OccurredAtUtc { get; }");
+            ev.AppendLine("}");
+            files.Add(new EmittedFile(CleanLayout.DomainCommonPath(project, "IDomainEvent"), ev.ToString()));
+
+            var has = new StringBuilder();
+            has.AppendLine($"namespace {ns};");
+            has.AppendLine();
+            has.AppendLine("/// <summary>");
+            has.AppendLine("/// Implemented by aggregate roots that buffer domain events for dispatch via the SaveChanges interceptor.");
+            has.AppendLine("/// </summary>");
+            has.AppendLine("public interface IHasDomainEvents");
+            has.AppendLine("{");
+            has.AppendLine("    System.Collections.Generic.IReadOnlyCollection<IDomainEvent> DomainEvents { get; }");
+            has.AppendLine("    void ClearDomainEvents();");
+            has.AppendLine("}");
+            files.Add(new EmittedFile(CleanLayout.DomainCommonPath(project, "IHasDomainEvents"), has.ToString()));
+        }
+
+        return files;
     }
 }

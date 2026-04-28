@@ -54,7 +54,42 @@ public sealed class UseCasesEmitter : IEmitter
                 BuildTenantContext(ns)));
         }
 
+        // V#13: when domain events are enabled, emit IDomainEventPublisher in the
+        // Application layer so the SaveChanges interceptor (Infrastructure) can depend
+        // on it through DIP. The default implementation is a logger that writes events
+        // to ILogger; replace it with a transport-backed publisher (Service Bus, Kafka,
+        // etc.) without touching Infrastructure.
+        if (ctx.Config.EnableDomainEvents)
+        {
+            var commonNs = CleanLayout.DomainCommonNamespace(project);
+            files.Add(new EmittedFile(
+                CleanLayout.ApplicationAbstractionsPath(project, "IDomainEventPublisher"),
+                BuildDomainEventPublisher(ns, commonNs)));
+        }
+
         return files;
+    }
+
+    static string BuildDomainEventPublisher(string ns, string commonNs)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("using System.Threading;");
+        sb.AppendLine("using System.Threading.Tasks;");
+        sb.AppendLine();
+        sb.AppendLine($"namespace {ns};");
+        sb.AppendLine();
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine("/// V#13: dispatches domain events out of the aggregate. The generated");
+        sb.AppendLine("/// SaveChanges interceptor invokes this after the transaction commits, so");
+        sb.AppendLine("/// publishers should be at-least-once and idempotent. The default Infrastructure");
+        sb.AppendLine("/// registration is a logger-only implementation; swap to a transport-backed one");
+        sb.AppendLine("/// (Service Bus, Kafka, RabbitMQ) without touching the Application layer.");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine("public interface IDomainEventPublisher");
+        sb.AppendLine("{");
+        sb.AppendLine($"    Task PublishAsync({commonNs}.IDomainEvent domainEvent, CancellationToken ct);");
+        sb.AppendLine("}");
+        return sb.ToString();
     }
 
     static string BuildTenantContext(string ns)

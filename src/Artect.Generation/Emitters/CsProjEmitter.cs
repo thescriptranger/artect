@@ -166,6 +166,15 @@ public sealed class CsProjEmitter : IEmitter
             sb.AppendLine(PackageRef("Microsoft.Data.SqlClient", "5.*"));
         }
 
+        // V#13: outbox dispatcher is a BackgroundService — needs Hosting.Abstractions for
+        // IHostedService and Logging.Abstractions for ILogger<T>. Both abstractions only;
+        // the concrete implementations come in transitively from the Api host.
+        if (cfg.EnableDomainEvents)
+        {
+            sb.AppendLine(PackageRef("Microsoft.Extensions.Hosting.Abstractions", $"{major}.0.*"));
+            sb.AppendLine(PackageRef("Microsoft.Extensions.Logging.Abstractions", $"{major}.0.*"));
+        }
+
         sb.AppendLine("  </ItemGroup>");
         sb.AppendLine();
         sb.AppendLine("  <ItemGroup>");
