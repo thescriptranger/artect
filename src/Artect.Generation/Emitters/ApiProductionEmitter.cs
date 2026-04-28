@@ -258,7 +258,10 @@ public sealed class ApiProductionEmitter : IEmitter
         sb.AppendLine("    public static IServiceCollection AddDefaultOpenTelemetry(this IServiceCollection services, IConfiguration configuration, IHostEnvironment env)");
         sb.AppendLine("    {");
         sb.AppendLine("        var otlpEndpoint = configuration[\"OpenTelemetry:OtlpEndpoint\"];");
-        sb.AppendLine("        var serviceName = configuration[\"OpenTelemetry:ServiceName\"] ?? DefaultServiceName;");
+        sb.AppendLine("        // appsettings.json ships the key with an empty string so operators see it; ?? would");
+        sb.AppendLine("        // accept that empty value and ResourceBuilder.AddService(\"\") throws. Treat empty as unset.");
+        sb.AppendLine("        var configuredServiceName = configuration[\"OpenTelemetry:ServiceName\"];");
+        sb.AppendLine("        var serviceName = string.IsNullOrWhiteSpace(configuredServiceName) ? DefaultServiceName : configuredServiceName;");
         sb.AppendLine();
         sb.AppendLine("        var resourceBuilder = ResourceBuilder.CreateDefault()");
         sb.AppendLine("            .AddService(serviceName, serviceVersion: typeof(OpenTelemetryServiceCollectionExtensions).Assembly.GetName().Version?.ToString())");
