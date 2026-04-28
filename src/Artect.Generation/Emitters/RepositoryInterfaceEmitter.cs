@@ -47,8 +47,8 @@ public sealed class RepositoryInterfaceEmitter : IEmitter
                 sb.AppendLine($"    Task<bool> ExistsBy{prop}Async({type} value, CancellationToken ct);");
             if ((crud & CrudOperation.Post) != 0)
                 sb.AppendLine($"    Task AddAsync({name} entity, CancellationToken ct);");
-            if ((crud & (CrudOperation.Put | CrudOperation.Patch)) != 0)
-                sb.AppendLine($"    void ApplyChanges({name} existing, {name} replacement);");
+            // V#3: ApplyChanges removed. Update/Patch handlers call domain methods on
+            // the loaded aggregate; EF persists tracked mutations on commit.
             if ((crud & CrudOperation.Delete) != 0)
                 sb.AppendLine($"    void Remove({name} entity);");
             sb.AppendLine("}");

@@ -59,8 +59,21 @@ public sealed class RequestEmitter : IEmitter
         {
             // Drop columns flagged Ignored in artect.yaml columnMetadata.
             if (entity.ColumnHasFlag(c.Name, ColumnMetadata.Ignored)) continue;
-            // For Create requests skip server-generated / identity PK columns
-            if (isCreate && pkCols.Contains(c.Name) && c.IsServerGenerated) continue;
+
+            var isPk = pkCols.Contains(c.Name);
+            if (isCreate)
+            {
+                // Create: skip server-generated PK (DB assigns it).
+                if (isPk && c.IsServerGenerated) continue;
+            }
+            else
+            {
+                // V#3 Update: keep PK (URL identifier) + updateable columns. Drop
+                // ProtectedFromUpdate (domain method controls those) and non-PK
+                // server-generated columns (DB controls those — audit/concurrency).
+                if (entity.ColumnHasFlag(c.Name, ColumnMetadata.ProtectedFromUpdate)) continue;
+                if (!isPk && c.IsServerGenerated) continue;
+            }
 
             var csBase = SqlTypeMap.ToCs(c.ClrType);
             string clrTypeWithNullability;

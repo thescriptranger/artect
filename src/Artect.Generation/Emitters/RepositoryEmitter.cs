@@ -82,12 +82,8 @@ public sealed class RepositoryEmitter : IEmitter
             sb.AppendLine($"    public async Task AddAsync({name} entity, CancellationToken ct) =>");
             sb.AppendLine($"        await db.{dbset}.AddAsync(entity, ct).ConfigureAwait(false);");
         }
-        if ((crud & (CrudOperation.Put | CrudOperation.Patch)) != 0)
-        {
-            sb.AppendLine();
-            sb.AppendLine($"    public void ApplyChanges({name} existing, {name} replacement) =>");
-            sb.AppendLine("        db.Entry(existing).CurrentValues.SetValues(replacement);");
-        }
+        // V#3: no ApplyChanges. Update/Patch handlers call domain methods on the loaded
+        // aggregate; EF tracks the private-setter mutations and persists them on commit.
         if ((crud & CrudOperation.Delete) != 0)
         {
             sb.AppendLine();

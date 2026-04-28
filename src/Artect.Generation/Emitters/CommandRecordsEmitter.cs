@@ -26,17 +26,40 @@ public sealed class CommandRecordsEmitter : IEmitter
             if (entity.ShouldSkip(EntityClassification.AggregateRoot)) continue;
 
             var name = entity.EntityTypeName;
-            var nonServerGen = entity.Table.Columns.Where(c => !c.IsServerGenerated).ToList();
-            var allCols = entity.Table.Columns.ToList();
+            var nonServerGen = entity.Table.Columns
+                .Where(c => !entity.ColumnHasFlag(c.Name, ColumnMetadata.Ignored))
+                .Where(c => !c.IsServerGenerated)
+                .ToList();
+            var updateCols = UpdateCommandColumns(entity);
 
             if ((crud & CrudOperation.Post) != 0)
                 list.Add(BuildRecord(ctx, entity, $"Create{name}Command", nonServerGen));
             if ((crud & CrudOperation.Put) != 0)
-                list.Add(BuildRecord(ctx, entity, $"Update{name}Command", allCols));
+                list.Add(BuildRecord(ctx, entity, $"Update{name}Command", updateCols));
             if ((crud & CrudOperation.Patch) != 0)
-                list.Add(BuildRecord(ctx, entity, $"Patch{name}Command", allCols));
+                list.Add(BuildRecord(ctx, entity, $"Patch{name}Command", updateCols));
         }
         return list;
+    }
+
+    /// <summary>
+    /// V#3 Update/Patch command shape: PK columns (URL identifier) plus the entity's
+    /// updateable columns (= non-Ignored, non-ServerGenerated, non-PK,
+    /// non-ProtectedFromUpdate). Mirrors the entity's Update method signature so the
+    /// handler can pass through field-by-field.
+    /// </summary>
+    static IReadOnlyList<Column> UpdateCommandColumns(NamedEntity entity)
+    {
+        var pk = entity.Table.PrimaryKey;
+        var pkColumns = pk is null
+            ? System.Array.Empty<Column>()
+            : pk.ColumnNames
+                .Select(n => entity.Table.Columns.FirstOrDefault(c =>
+                    string.Equals(c.Name, n, System.StringComparison.OrdinalIgnoreCase)))
+                .Where(c => c is not null && !entity.ColumnHasFlag(c.Name, ColumnMetadata.Ignored))
+                .Cast<Column>()
+                .ToArray();
+        return pkColumns.Concat(entity.UpdateableColumns()).ToList();
     }
 
     static EmittedFile BuildRecord(EmitterContext ctx, NamedEntity entity, string recordName, IReadOnlyList<Column> cols)
