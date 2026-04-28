@@ -120,7 +120,7 @@ public sealed class ProgramCsEmitter : IEmitter
         sb.AppendLine("app.UseHttpsRedirection();");
         sb.AppendLine("// V#18: security headers run before auth so 401/403 responses still carry HSTS / CSP / etc.");
         sb.AppendLine("app.UseSecurityHeaders();");
-        sb.AppendLine($"app.UseCors(CorsServiceCollectionExtensions.PolicyName);");
+        sb.AppendLine($"app.UseCors(CorsConfiguration.PolicyName);");
         sb.AppendLine("app.UseRateLimiter();");
         if (authEnabled)
         {

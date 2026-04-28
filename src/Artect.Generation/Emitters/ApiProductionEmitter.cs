@@ -95,7 +95,7 @@ public sealed class ApiProductionEmitter : IEmitter
         sb.AppendLine("/// default for an unfinished public API. Production deployments populate the");
         sb.AppendLine("/// list per environment via appsettings or environment variables.");
         sb.AppendLine("/// </summary>");
-        sb.AppendLine("public static class CorsServiceCollectionExtensions");
+        sb.AppendLine("public static class CorsConfiguration");
         sb.AppendLine("{");
         sb.AppendLine("    public const string PolicyName = \"Default\";");
         sb.AppendLine();

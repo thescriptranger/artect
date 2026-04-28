@@ -45,11 +45,11 @@ public sealed class ApiValidatorsEmitter : IEmitter
             sb.AppendLine();
 
             if ((crud & CrudOperation.Post) != 0)
-                EmitValidatorClass(sb, $"Create{name}Request", createCols, corrections);
+                EmitValidatorClass(sb, $"Create{name}Request", createCols, corrections, isPatch: false);
             if ((crud & CrudOperation.Put) != 0)
-                EmitValidatorClass(sb, $"Update{name}Request", allCols, corrections);
+                EmitValidatorClass(sb, $"Update{name}Request", allCols, corrections, isPatch: false);
             if ((crud & CrudOperation.Patch) != 0)
-                EmitValidatorClass(sb, $"Patch{name}Request", allCols, corrections);
+                EmitValidatorClass(sb, $"Patch{name}Request", allCols, corrections, isPatch: true);
 
             list.Add(new EmittedFile(
                 CleanLayout.ApiValidatorsPath(project, $"{name}Validators"),
@@ -59,7 +59,7 @@ public sealed class ApiValidatorsEmitter : IEmitter
     }
 
     static void EmitValidatorClass(StringBuilder sb, string requestTypeName, IReadOnlyList<Column> cols,
-        IReadOnlyDictionary<string, string> corrections)
+        IReadOnlyDictionary<string, string> corrections, bool isPatch)
     {
         sb.AppendLine($"public sealed partial class {requestTypeName}Validator : IValidator<{requestTypeName}>");
         sb.AppendLine("{");
@@ -74,35 +74,65 @@ public sealed class ApiValidatorsEmitter : IEmitter
         sb.AppendLine("        }");
         sb.AppendLine();
 
+        // V#5 PATCH semantics: every field is wrapped in Optional<T?>. A field is only
+        // validated when the client actually supplied it (HasValue == true). Once unwrapped
+        // via .Value, the inner type is T? — we use pattern matching ("is { } x") to
+        // reject null and bind the non-null payload for further checks.
         foreach (var col in cols)
         {
             var prop = EntityNaming.PropertyName(col, corrections);
             if (!col.IsNullable && col.ClrType == ClrType.String)
             {
-                sb.AppendLine($"        if (string.IsNullOrWhiteSpace(dto.{prop}))");
+                if (isPatch)
+                {
+                    sb.AppendLine($"        if (dto.{prop}.HasValue && string.IsNullOrWhiteSpace(dto.{prop}.Value))");
+                }
+                else
+                {
+                    sb.AppendLine($"        if (string.IsNullOrWhiteSpace(dto.{prop}))");
+                }
                 sb.AppendLine($"            result.Add(nameof(dto.{prop}), \"{col.Name} is required.\");");
             }
             if (col.ClrType == ClrType.String && col.MaxLength is int max && max > 0)
             {
-                sb.AppendLine($"        if (dto.{prop} is {{ Length: > {max} }})");
+                if (isPatch)
+                {
+                    sb.AppendLine($"        if (dto.{prop}.Value is {{ Length: > {max} }})");
+                }
+                else
+                {
+                    sb.AppendLine($"        if (dto.{prop} is {{ Length: > {max} }})");
+                }
                 sb.AppendLine($"            result.Add(nameof(dto.{prop}), \"{col.Name} must be at most {max} characters.\");");
             }
             if (!col.IsNullable && col.ClrType == ClrType.Guid)
             {
-                sb.AppendLine($"        if (dto.{prop} == System.Guid.Empty)");
+                if (isPatch)
+                {
+                    sb.AppendLine($"        if (dto.{prop}.Value is System.Guid {prop}_v && {prop}_v == System.Guid.Empty)");
+                }
+                else
+                {
+                    sb.AppendLine($"        if (dto.{prop} == System.Guid.Empty)");
+                }
                 sb.AppendLine($"            result.Add(nameof(dto.{prop}), \"{col.Name} is required.\");");
             }
         }
 
-        // Paired created/updated check
-        var createdCol = cols.FirstOrDefault(c => IsDateLike(c) && IsCreatedTimestampName(c.Name));
-        var updatedCol = cols.FirstOrDefault(c => IsDateLike(c) && IsUpdatedTimestampName(c.Name));
-        if (createdCol is not null && updatedCol is not null)
+        // Paired created/updated check — skipped on PATCH because the client may legitimately
+        // supply only one half of the pair, and Optional<DateTime?> doesn't compose with the
+        // direct < operator.
+        if (!isPatch)
         {
-            var createdProp = EntityNaming.PropertyName(createdCol, corrections);
-            var updatedProp = EntityNaming.PropertyName(updatedCol, corrections);
-            sb.AppendLine($"        if (dto.{updatedProp} < dto.{createdProp})");
-            sb.AppendLine($"            result.Add(nameof(dto.{updatedProp}), \"{updatedCol.Name} cannot be before {createdCol.Name}.\");");
+            var createdCol = cols.FirstOrDefault(c => IsDateLike(c) && IsCreatedTimestampName(c.Name));
+            var updatedCol = cols.FirstOrDefault(c => IsDateLike(c) && IsUpdatedTimestampName(c.Name));
+            if (createdCol is not null && updatedCol is not null)
+            {
+                var createdProp = EntityNaming.PropertyName(createdCol, corrections);
+                var updatedProp = EntityNaming.PropertyName(updatedCol, corrections);
+                sb.AppendLine($"        if (dto.{updatedProp} < dto.{createdProp})");
+                sb.AppendLine($"            result.Add(nameof(dto.{updatedProp}), \"{updatedCol.Name} cannot be before {createdCol.Name}.\");");
+            }
         }
 
         sb.AppendLine();
