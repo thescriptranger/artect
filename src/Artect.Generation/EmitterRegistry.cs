@@ -1,66 +1,32 @@
+using System;
 using System.Collections.Generic;
-using Artect.Generation.Emitters;
+using System.Linq;
 
 namespace Artect.Generation;
 
+/// <summary>
+/// V#16: emitter discovery via reflection over the Artect.Generation assembly.
+/// Adding a new emitter requires no edit to this file — declare the class,
+/// implement <see cref="IEmitter"/>, give it a public parameterless constructor,
+/// and it is auto-registered. Mark with <see cref="ExcludeFromAutoRegistrationAttribute"/>
+/// to opt out (experimental work, composite emitters, test fixtures).
+///
+/// The discovery order is alphabetical by full type name so generator output
+/// remains byte-deterministic across machines and runs.
+/// </summary>
 public static class EmitterRegistry
 {
-    public static IReadOnlyList<IEmitter> All() => new IEmitter[]
+    public static IReadOnlyList<IEmitter> All() => Discover().ToArray();
+
+    static IEnumerable<IEmitter> Discover()
     {
-        new ApiAuthEmitter(),
-        new ApiDiEmitter(),
-        new ArchitectureTestsEmitter(),
-        new ApiFiltersEmitter(),
-        new ApiProblemEmitter(),
-        new ApiTestsEmitter(),
-        new AppSettingsEmitter(),
-        new ApplicationDiEmitter(),
-        new ApplicationTestsEmitter(),
-        new ArtectConfigEmitter(),
-        new CommandRecordsEmitter(),
-        new CsProjEmitter(),
-        new DapperConnectionFactoryEmitter(),
-        new DbContextEmitter(),
-        new DtoMapperEmitter(),
-        new DbFunctionsEmitter(),
-        new DockerEmitter(),
-        new DomainCommonEmitter(),
-        new DomainTestsEmitter(),
-        new DtoEmitter(),
-        new EntityBehaviorEmitter(),
-        new EntityConfigurationsEmitter(),
-        new EntityEmitter(),
-        new EntityDtoEmitter(),
-        new EntityMappingsEmitter(),
-        new EndpointRegistrationEmitter(),
-        new EnumEmitter(),
-        new HandlerEmitter(),
-        new InfrastructureDiEmitter(),
-        new InfrastructureInterceptorsEmitter(),
-        new InfrastructureTestsEmitter(),
-        new LaunchSettingsEmitter(),
-        new MigrationsEmitter(),
-        new MinimalApiEndpointEmitter(),
-        new OutboxEmitter(),
-        new OutboxDispatcherEmitter(),
-        new PagedResponseEmitter(),
-        new ProductionMiddlewareEmitter(),
-        new ProgramCsEmitter(),
-        new ReadServiceEmitter(),
-        new ReadServiceInterfaceEmitter(),
-        new RepoHygieneEmitter(),
-        new RepositoryEmitter(),
-        new RepositoryInterfaceEmitter(),
-        new RequestEmitter(),
-        new ResponseEmitter(),
-        new SharedCommonEmitter(),
-        new SlnEmitter(),
-        new StoredProceduresEmitter(),
-        new UnitOfWorkEmitter(),
-        new UseCasesEmitter(),
-        new ValidationErrorEmitter(),
-        new ValidationResultEmitter(),
-        new ApiValidatorsEmitter(),
-        new ValidationResultExtensionsEmitter(),
-    };
+        var emitterInterface = typeof(IEmitter);
+        return emitterInterface.Assembly.GetTypes()
+            .Where(t => !t.IsAbstract && !t.IsInterface)
+            .Where(t => emitterInterface.IsAssignableFrom(t))
+            .Where(t => t.GetCustomAttributes(typeof(ExcludeFromAutoRegistrationAttribute), inherit: false).Length == 0)
+            .Where(t => t.GetConstructor(Type.EmptyTypes) is not null)
+            .OrderBy(t => t.FullName, StringComparer.Ordinal)
+            .Select(t => (IEmitter)Activator.CreateInstance(t)!);
+    }
 }
