@@ -1,5 +1,6 @@
 <Project>
   <ItemGroup>
     <PackageVersion Include="Microsoft.Data.SqlClient" Version="5.2.2" />
+    <PackageVersion Include="YamlDotNet" Version="16.2.1" />
   </ItemGroup>
 </Project>
