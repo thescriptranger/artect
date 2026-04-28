@@ -40,6 +40,7 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         var crud    = ctx.Config.Crud;
         var name    = entity.EntityTypeName;
         var corrections = ctx.NamingCorrections;
+        var authEnabled = ctx.Config.Auth != AuthKind.None;
 
         var pk = entity.Table.PrimaryKey!;
         var pkColName = pk.ColumnNames[0];
@@ -92,7 +93,11 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         sb.AppendLine("{");
         sb.AppendLine($"    public static IEndpointRouteBuilder Map{plural}Endpoints(this IEndpointRouteBuilder app)");
         sb.AppendLine("    {");
-        sb.AppendLine($"        var group = app.MapGroup(\"/api/{route}\");");
+        // V#9: when auth is configured, every endpoint in this group requires
+        // authentication. Per-endpoint policies/scopes can be added via additional
+        // .RequireAuthorization("policy") calls on individual MapXxx returns.
+        var groupSuffix = authEnabled ? ".RequireAuthorization()" : string.Empty;
+        sb.AppendLine($"        var group = app.MapGroup(\"/api/{route}\"){groupSuffix};");
         sb.AppendLine();
 
         if ((crud & CrudOperation.GetList) != 0)

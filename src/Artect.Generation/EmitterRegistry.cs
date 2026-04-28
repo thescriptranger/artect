@@ -7,6 +7,7 @@ public static class EmitterRegistry
 {
     public static IReadOnlyList<IEmitter> All() => new IEmitter[]
     {
+        new ApiAuthEmitter(),
         new ApiDiEmitter(),
         new ApiFiltersEmitter(),
         new ApiProblemEmitter(),

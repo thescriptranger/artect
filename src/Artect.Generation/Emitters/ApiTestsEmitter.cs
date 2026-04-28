@@ -27,12 +27,19 @@ public sealed class ApiTestsEmitter : IEmitter
         var testProject = $"{project}.Api.Tests";
         var testsDir = $"tests/{testProject}";
 
+        var authEnabled = ctx.Config.Auth != AuthKind.None;
         var list = new List<EmittedFile>
         {
             new EmittedFile($"{testsDir}/{testProject}.csproj", BuildCsproj(project, tfm)),
             new EmittedFile($"{testsDir}/TestWebApplicationFactory.cs",
-                BuildFactory(project, testProject, ctx.Config.DataAccess)),
+                BuildFactory(project, testProject, ctx.Config.DataAccess, authEnabled)),
         };
+        if (authEnabled)
+        {
+            list.Add(new EmittedFile(
+                $"{testsDir}/TestAuthenticationHandler.cs",
+                BuildTestAuthenticationHandler(testProject)));
+        }
 
         foreach (var entity in ctx.Model.Entities)
         {
@@ -76,7 +83,7 @@ public sealed class ApiTestsEmitter : IEmitter
   </ItemGroup>
 </Project>";
 
-    static string BuildFactory(string project, string testsNs, DataAccessKind dataAccess)
+    static string BuildFactory(string project, string testsNs, DataAccessKind dataAccess, bool authEnabled)
     {
         var dbCtx = $"{project}DbContext";
         var infraNs = $"{CleanLayout.InfrastructureNamespace(project)}.Data";
@@ -100,6 +107,17 @@ public sealed class ApiTestsEmitter : IEmitter
                 }
                 """;
         }
+
+        // V#9: when auth is enabled, install a TestAuthenticationHandler as the default
+        // scheme so existing CRUD tests pass without sending real Bearer tokens.
+        // Anonymous-rejection tests opt out by sending the X-Test-Anonymous header.
+        var authBlock = authEnabled
+            ? $$"""
+
+                        services.AddAuthentication(defaultScheme: "Test")
+                            .AddScheme<global::Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, TestAuthenticationHandler>("Test", _ => { });
+                """
+            : string.Empty;
 
         return $$"""
             using System.Linq;
@@ -131,12 +149,48 @@ public sealed class ApiTestsEmitter : IEmitter
                             services.Remove(d);
                         }
 
-                        services.AddDbContext<{{dbCtx}}>(opt => opt.UseInMemoryDatabase(DatabaseName));
+                        services.AddDbContext<{{dbCtx}}>(opt => opt.UseInMemoryDatabase(DatabaseName));{{authBlock}}
                     });
                 }
             }
             """;
     }
+
+    /// <summary>
+    /// V#9 test auth scheme. Auto-passes by default so existing CRUD tests continue to
+    /// work without sending real bearer tokens. Returns NoResult when the
+    /// X-Test-Anonymous header is present, which lets the auth middleware reject the
+    /// request as unauthenticated and exercise the 401 path.
+    /// </summary>
+    static string BuildTestAuthenticationHandler(string testsNs) => $$"""
+        using System.Security.Claims;
+        using System.Text.Encodings.Web;
+        using System.Threading.Tasks;
+        using Microsoft.AspNetCore.Authentication;
+        using Microsoft.Extensions.Logging;
+        using Microsoft.Extensions.Options;
+
+        namespace {{testsNs}};
+
+        public sealed class TestAuthenticationHandler(
+            IOptionsMonitor<AuthenticationSchemeOptions> options,
+            ILoggerFactory logger,
+            UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+        {
+            const string AnonymousHeader = "X-Test-Anonymous";
+
+            protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+            {
+                if (Request.Headers.ContainsKey(AnonymousHeader))
+                    return Task.FromResult(AuthenticateResult.NoResult());
+
+                var claims = new[] { new Claim(ClaimTypes.Name, "test-user") };
+                var identity = new ClaimsIdentity(claims, Scheme.Name);
+                var ticket = new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name);
+                return Task.FromResult(AuthenticateResult.Success(ticket));
+            }
+        }
+        """;
 
     static string BuildEndpointTest(
         NamedEntity entity, string plural, string route,
@@ -276,6 +330,16 @@ public sealed class ApiTestsEmitter : IEmitter
         if (emitV5NullTest)
         {
             body.Append(BuildPatchExplicitNullTest(entity, route, nullableUpdateableVisibleCols[0], corrections));
+        }
+
+        // V#9 acceptance #4: when auth is configured, prove anonymous requests get 401.
+        // The TestAuthenticationHandler returns NoResult for the X-Test-Anonymous header,
+        // which lets the RequireAuthorization() chain on the endpoint group challenge
+        // with a 401. We pick the first available verb in priority order (GetList →
+        // GetById → Post) so the test always has a real route to hit.
+        if (cfg.Auth != AuthKind.None)
+        {
+            body.Append(BuildAnonymousRejectionTest(route, crud));
         }
 
         if ((crud & CrudOperation.Delete) != 0)
@@ -619,6 +683,53 @@ public sealed class ApiTestsEmitter : IEmitter
         sb.AppendLine($"        var actual = await getAfter.Content.ReadFromJsonAsync<{entityName}Response>().ConfigureAwait(false);");
         sb.AppendLine("        Assert.NotNull(actual);");
         sb.AppendLine($"        Assert.Null(actual!.{nullableProp});");
+        sb.AppendLine("    }");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// V#9: emits a single per-entity test that hits the first available CRUD verb
+    /// with the X-Test-Anonymous header and asserts a 401 response. The test handler
+    /// in <see cref="BuildTestAuthenticationHandler"/> treats that header as "no
+    /// authentication," and the V#9 RequireAuthorization() chain on each endpoint
+    /// group challenges with 401.
+    /// </summary>
+    static string BuildAnonymousRejectionTest(string route, CrudOperation crud)
+    {
+        // Pick the first verb whose route exists in the generated solution.
+        string testName;
+        string requestLine;
+        if ((crud & CrudOperation.GetList) != 0)
+        {
+            testName = "Get_list_returns_401_when_anonymous";
+            requestLine = $"        var response = await client.GetAsync(\"/api/{route}\").ConfigureAwait(false);";
+        }
+        else if ((crud & CrudOperation.GetById) != 0)
+        {
+            testName = "Get_by_id_returns_401_when_anonymous";
+            requestLine = $"        var response = await client.GetAsync(\"/api/{route}/00000000-0000-0000-0000-000000000000\").ConfigureAwait(false);";
+        }
+        else if ((crud & CrudOperation.Post) != 0)
+        {
+            testName = "Post_returns_401_when_anonymous";
+            requestLine =
+                "        var content = new System.Net.Http.StringContent(\"{}\", System.Text.Encoding.UTF8, \"application/json\");" + System.Environment.NewLine +
+                $"        var response = await client.PostAsync(\"/api/{route}\", content).ConfigureAwait(false);";
+        }
+        else
+        {
+            return string.Empty;
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine();
+        sb.AppendLine("    [Fact]");
+        sb.AppendLine($"    public async System.Threading.Tasks.Task {testName}()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        using var client = _factory.CreateClient();");
+        sb.AppendLine("        client.DefaultRequestHeaders.Add(\"X-Test-Anonymous\", \"true\");");
+        sb.AppendLine(requestLine);
+        sb.AppendLine("        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);");
         sb.AppendLine("    }");
         return sb.ToString();
     }
