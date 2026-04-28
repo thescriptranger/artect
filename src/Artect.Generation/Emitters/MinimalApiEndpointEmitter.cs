@@ -54,9 +54,6 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
             _               => string.Empty,
         };
 
-        var nonServerGenCols = entity.Table.Columns.Where(c => !c.IsServerGenerated).ToList();
-        var allCols          = entity.Table.Columns.ToList();
-
         var apiMapNs   = CleanLayout.ApiMappingsNamespace(project);
         var dtosNs     = CleanLayout.ApplicationDtosNamespace(project);
         var featureNs  = CleanLayout.ApplicationFeatureNamespace(project, name);
@@ -67,6 +64,9 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         var respNs     = CleanLayout.SharedResponsesNamespace(project);
         var endpointNs = $"{project}.Api.Endpoints";
 
+        var filtersNs = $"{project}.Api.Filters";
+        var needsValidationFilter = (crud & (CrudOperation.Post | CrudOperation.Put)) != 0;
+
         var sb = new StringBuilder();
         sb.AppendLine($"using {apiMapNs};");
         sb.AppendLine($"using {dtosNs};");
@@ -74,6 +74,8 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         sb.AppendLine($"using {absNs};");
         sb.AppendLine($"using {appValidNs};");
         sb.AppendLine($"using {apiValidNs};");
+        if (needsValidationFilter)
+            sb.AppendLine($"using {filtersNs};");
         sb.AppendLine($"using {reqNs};");
         sb.AppendLine($"using {respNs};");
         sb.AppendLine("using Microsoft.AspNetCore.Builder;");
@@ -97,14 +99,16 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
             EmitGetList(sb, name);
         if ((crud & CrudOperation.GetById) != 0)
             EmitGetById(sb, name, pkType, pkRouteConstraint);
+        // V#8: lambdas now delegate. Validation runs in ValidationFilter<TRequest>;
+        // request→command translation lives in <Entity>Mappings.ToCommand(...).
         if ((crud & CrudOperation.Post) != 0)
-            EmitPost(sb, name, route, pkProp, nonServerGenCols, corrections);
+            EmitPost(sb, name, route, pkProp);
         if ((crud & CrudOperation.Put) != 0)
-            EmitUpdate(sb, name, pkColName, pkProp, pkType, pkRouteConstraint, allCols, corrections, verb: "Put", commandPrefix: "Update");
+            EmitUpdate(sb, name, pkType, pkRouteConstraint);
         // V#5: PATCH uses dedicated PatchXxxRequest (Optional<T?> fields) and PatchXxxHandler.
         // Domain Update method validates after merge; no API-level validator.
         if ((crud & CrudOperation.Patch) != 0)
-            EmitPatch(sb, name, pkColName, pkProp, pkType, pkRouteConstraint, entity, corrections);
+            EmitPatch(sb, name, pkType, pkRouteConstraint);
         if ((crud & CrudOperation.Delete) != 0)
             EmitDelete(sb, name, pkType, pkRouteConstraint);
 
@@ -144,94 +148,48 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         sb.AppendLine();
     }
 
-    static void EmitPost(StringBuilder sb, string name, string route, string pkProp,
-        IReadOnlyList<Column> nonServerGenCols, IReadOnlyDictionary<string, string> corrections)
+    /// <summary>
+    /// V#8: thin POST endpoint. Validation runs in <c>ValidationFilter&lt;TRequest&gt;</c>;
+    /// request→command translation lives in <c>&lt;Entity&gt;Mappings.ToCommand()</c>.
+    /// </summary>
+    static void EmitPost(StringBuilder sb, string name, string route, string pkProp)
     {
-        sb.AppendLine($"        group.MapPost(\"/\", async (Create{name}Request request, Create{name}Handler handler, IValidator<Create{name}Request> validator, CancellationToken ct) =>");
+        sb.AppendLine($"        group.MapPost(\"/\", async (Create{name}Request request, Create{name}Handler handler, CancellationToken ct) =>");
         sb.AppendLine("        {");
-        sb.AppendLine("            var validation = validator.Validate(request);");
-        sb.AppendLine("            if (!validation.IsValid) { return validation.ToBadRequest(); }");
-        sb.AppendLine();
-        sb.AppendLine($"            var command = new Create{name}Command(");
-        for (int i = 0; i < nonServerGenCols.Count; i++)
-        {
-            var col = nonServerGenCols[i];
-            var prop = EntityNaming.PropertyName(col, corrections);
-            var terminator = i == nonServerGenCols.Count - 1 ? ");" : ",";
-            sb.AppendLine($"                request.{prop}{terminator}");
-        }
-        sb.AppendLine();
-        sb.AppendLine("            var entity = await handler.HandleAsync(command, ct).ConfigureAwait(false);");
+        sb.AppendLine("            var entity = await handler.HandleAsync(request.ToCommand(), ct).ConfigureAwait(false);");
         sb.AppendLine($"            return Results.Created($\"/api/{route}/{{entity.{pkProp}}}\", entity.ToResponse());");
-        sb.AppendLine("        });");
-        sb.AppendLine();
-    }
-
-    static void EmitUpdate(StringBuilder sb, string name, string pkColName, string pkProp, string pkType, string pkRouteConstraint,
-        IReadOnlyList<Column> allCols, IReadOnlyDictionary<string, string> corrections,
-        string verb, string commandPrefix)
-    {
-        var commandType = $"{commandPrefix}{name}Command";
-        var handlerType = $"{commandPrefix}{name}Handler";
-        var requestType = $"Update{name}Request"; // Same Request type for Put and Patch
-        var mapVerb = verb == "Put" ? "MapPut" : "MapPatch";
-
-        sb.AppendLine($"        group.{mapVerb}(\"/{{id{pkRouteConstraint}}}\", async ({pkType} id, {requestType} request, {handlerType} handler, IValidator<{requestType}> validator, CancellationToken ct) =>");
-        sb.AppendLine("        {");
-        sb.AppendLine("            var validation = validator.Validate(request);");
-        sb.AppendLine("            if (!validation.IsValid) { return validation.ToBadRequest(); }");
-        sb.AppendLine();
-        sb.AppendLine($"            var command = new {commandType}(");
-        for (int i = 0; i < allCols.Count; i++)
-        {
-            var col = allCols[i];
-            var prop = EntityNaming.PropertyName(col, corrections);
-            var value = string.Equals(col.Name, pkColName, System.StringComparison.OrdinalIgnoreCase) ? "id" : $"request.{prop}";
-            var terminator = i == allCols.Count - 1 ? ");" : ",";
-            sb.AppendLine($"                {value}{terminator}");
-        }
-        sb.AppendLine();
-        sb.AppendLine("            var entity = await handler.HandleAsync(command, ct).ConfigureAwait(false);");
-        sb.AppendLine("            return entity is null ? Results.NotFound() : Results.Ok(entity.ToResponse());");
-        sb.AppendLine("        });");
+        sb.AppendLine("        })");
+        sb.AppendLine($"        .AddEndpointFilter<ValidationFilter<Create{name}Request>>();");
         sb.AppendLine();
     }
 
     /// <summary>
-    /// V#5 PATCH endpoint. Deserializes <c>Patch&lt;Entity&gt;Request</c> (whose non-PK
-    /// fields are <c>Optional&lt;T?&gt;</c>), builds <c>Patch&lt;Entity&gt;Command</c>
-    /// 1:1, calls <c>Patch&lt;Entity&gt;Handler</c>. No API-level validator — domain
-    /// <c>Update</c> validates after the handler merges Optional with the existing
-    /// entity.
+    /// V#8: thin PUT endpoint. Validation runs in the filter; mapping lives in
+    /// <c>&lt;Entity&gt;Mappings.ToCommand(id)</c>.
     /// </summary>
-    static void EmitPatch(StringBuilder sb, string name, string pkColName, string pkProp, string pkType, string pkRouteConstraint,
-        NamedEntity entity, IReadOnlyDictionary<string, string> corrections)
+    static void EmitUpdate(StringBuilder sb, string name, string pkType, string pkRouteConstraint)
     {
-        var commandType = $"Patch{name}Command";
-        var handlerType = $"Patch{name}Handler";
-        var requestType = $"Patch{name}Request";
-
-        // Patch command shape (per CommandRecordsEmitter): PK + UpdateableColumns.
-        var pkCols = entity.Table.PrimaryKey!.ColumnNames
-            .ToHashSet(System.StringComparer.OrdinalIgnoreCase);
-        var commandCols = entity.Table.Columns
-            .Where(c => pkCols.Contains(c.Name) && !entity.ColumnHasFlag(c.Name, ColumnMetadata.Ignored))
-            .Concat(entity.UpdateableColumns())
-            .ToList();
-
-        sb.AppendLine($"        group.MapPatch(\"/{{id{pkRouteConstraint}}}\", async ({pkType} id, {requestType} request, {handlerType} handler, CancellationToken ct) =>");
+        sb.AppendLine($"        group.MapPut(\"/{{id{pkRouteConstraint}}}\", async ({pkType} id, Update{name}Request request, Update{name}Handler handler, CancellationToken ct) =>");
         sb.AppendLine("        {");
-        sb.AppendLine($"            var command = new {commandType}(");
-        for (int i = 0; i < commandCols.Count; i++)
-        {
-            var col = commandCols[i];
-            var prop = EntityNaming.PropertyName(col, corrections);
-            var value = string.Equals(col.Name, pkColName, System.StringComparison.OrdinalIgnoreCase) ? "id" : $"request.{prop}";
-            var terminator = i == commandCols.Count - 1 ? ");" : ",";
-            sb.AppendLine($"                {value}{terminator}");
-        }
+        sb.AppendLine("            var entity = await handler.HandleAsync(request.ToCommand(id), ct).ConfigureAwait(false);");
+        sb.AppendLine("            return entity is null ? Results.NotFound() : Results.Ok(entity.ToResponse());");
+        sb.AppendLine("        })");
+        sb.AppendLine($"        .AddEndpointFilter<ValidationFilter<Update{name}Request>>();");
         sb.AppendLine();
-        sb.AppendLine("            var entity = await handler.HandleAsync(command, ct).ConfigureAwait(false);");
+    }
+
+    /// <summary>
+    /// V#5/V#8 PATCH endpoint. Deserializes <c>Patch&lt;Entity&gt;Request</c>
+    /// (Optional&lt;T?&gt; non-PK fields), maps via <c>request.ToCommand(id)</c>, calls
+    /// <c>Patch&lt;Entity&gt;Handler</c>. No API-level validator — domain
+    /// <c>Update</c> validates after the handler merges Optional with the existing
+    /// entity. Lambda is now a single delegate call.
+    /// </summary>
+    static void EmitPatch(StringBuilder sb, string name, string pkType, string pkRouteConstraint)
+    {
+        sb.AppendLine($"        group.MapPatch(\"/{{id{pkRouteConstraint}}}\", async ({pkType} id, Patch{name}Request request, Patch{name}Handler handler, CancellationToken ct) =>");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var entity = await handler.HandleAsync(request.ToCommand(id), ct).ConfigureAwait(false);");
         sb.AppendLine("            return entity is null ? Results.NotFound() : Results.Ok(entity.ToResponse());");
         sb.AppendLine("        });");
         sb.AppendLine();

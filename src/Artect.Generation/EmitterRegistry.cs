@@ -8,6 +8,7 @@ public static class EmitterRegistry
     public static IReadOnlyList<IEmitter> All() => new IEmitter[]
     {
         new ApiDiEmitter(),
+        new ApiFiltersEmitter(),
         new ApiProblemEmitter(),
         new ApiTestsEmitter(),
         new AppSettingsEmitter(),

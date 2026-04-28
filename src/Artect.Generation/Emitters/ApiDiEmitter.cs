@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Text;
+using Artect.Config;
 
 namespace Artect.Generation.Emitters;
 
@@ -9,10 +10,14 @@ public sealed class ApiDiEmitter : IEmitter
     {
         var project = ctx.Config.ProjectName;
         var appValidNs = CleanLayout.ApplicationValidatorsNamespace(project);
+        var registerValidationFilter = (ctx.Config.Crud
+            & (CrudOperation.Post | CrudOperation.Put | CrudOperation.Patch)) != 0;
 
         var sb = new StringBuilder();
         sb.AppendLine($"using {appValidNs};");
         sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
+        if (registerValidationFilter)
+            sb.AppendLine($"using {project}.Api.Filters;");
         sb.AppendLine();
         sb.AppendLine($"namespace {project}.Api;");
         sb.AppendLine();
@@ -32,6 +37,14 @@ public sealed class ApiDiEmitter : IEmitter
         sb.AppendLine("                services.AddScoped(iface, type);");
         sb.AppendLine("            }");
         sb.AppendLine("        }");
+        if (registerValidationFilter)
+        {
+            sb.AppendLine();
+            sb.AppendLine("        // V#8: register the generic ValidationFilter so endpoints can wire it via");
+            sb.AppendLine("        // .AddEndpointFilter<ValidationFilter<TRequest>>(). The open-generic");
+            sb.AppendLine("        // registration covers every closed TRequest used in routes.");
+            sb.AppendLine("        services.AddTransient(typeof(ValidationFilter<>));");
+        }
         sb.AppendLine("        return services;");
         sb.AppendLine("    }");
         sb.AppendLine("}");
