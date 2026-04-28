@@ -29,6 +29,7 @@ public static class YamlWriter
         sb.AppendLine($"partitionStoredProceduresBySchema: {Bool(cfg.PartitionStoredProceduresBySchema)}");
         sb.AppendLine($"includeChildCollectionsInResponses: {Bool(cfg.IncludeChildCollectionsInResponses)}");
         sb.AppendLine($"validateForeignKeyReferences: {Bool(cfg.ValidateForeignKeyReferences)}");
+        sb.AppendLine($"maxPageSize: {cfg.MaxPageSize}");
         sb.AppendLine("schemas:");
         foreach (var s in cfg.Schemas) sb.AppendLine($"  - {s}");
         if (cfg.NamingCorrections.Count > 0)

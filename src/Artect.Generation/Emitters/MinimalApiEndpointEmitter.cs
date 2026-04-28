@@ -149,11 +149,15 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
 
     static void EmitGetList(StringBuilder sb, string name)
     {
-        sb.AppendLine($"        group.MapGet(\"/\", async (I{name}ReadService reads, CancellationToken ct, int page = 1, int pageSize = 50) =>");
+        // V#11: ?sort accepts comma-separated fields (with optional leading '-' for
+        // descending). The ReadService validates against a per-entity allowlist and
+        // throws QueryValidationException → 400 for unknown fields.
+        sb.AppendLine($"        group.MapGet(\"/\", async (I{name}ReadService reads, CancellationToken ct, int page = 1, int pageSize = 50, string? sort = null) =>");
         sb.AppendLine("        {");
-        sb.AppendLine("            if (page < 1) { page = 1; }");
-        sb.AppendLine("            if (pageSize < 1) { pageSize = 50; }");
-        sb.AppendLine("            var (items, totalCount) = await reads.GetPagedAsync(page, pageSize, ct).ConfigureAwait(false);");
+        sb.AppendLine("            // Page / pageSize clamping happens inside the read service so the cap is");
+        sb.AppendLine("            // applied uniformly whether the call comes from this endpoint or a hand-");
+        sb.AppendLine("            // written use case.");
+        sb.AppendLine("            var (items, totalCount) = await reads.GetPagedAsync(page, pageSize, sort, ct).ConfigureAwait(false);");
         sb.AppendLine($"            return Results.Ok(new PagedResponse<{name}Response>");
         sb.AppendLine("            {");
         sb.AppendLine("                Items = items.Select(e => e.ToResponse()).ToList(),");

@@ -198,7 +198,7 @@ public sealed class InfrastructureTestsEmitter : IEmitter
             sb.AppendLine("    {");
             sb.AppendLine("        using var db = CreateDb();");
             sb.AppendLine($"        var sut = new {e}ReadService(db);");
-            sb.AppendLine("        var (items, total) = await sut.GetPagedAsync(1, 10, default);");
+            sb.AppendLine("        var (items, total) = await sut.GetPagedAsync(1, 10, sort: null, default);");
             sb.AppendLine("        Assert.Empty(items);");
             sb.AppendLine("        Assert.Equal(0, total);");
             sb.AppendLine("    }");

@@ -40,7 +40,7 @@ public sealed class ReadServiceInterfaceEmitter : IEmitter
             sb.AppendLine($"public interface I{name}ReadService");
             sb.AppendLine("{");
             if ((crud & CrudOperation.GetList) != 0)
-                sb.AppendLine($"    Task<(IReadOnlyList<{name}Dto> Items, int TotalCount)> GetPagedAsync(int page, int pageSize, CancellationToken ct);");
+                sb.AppendLine($"    Task<(IReadOnlyList<{name}Dto> Items, int TotalCount)> GetPagedAsync(int page, int pageSize, string? sort, CancellationToken ct);");
             if ((crud & CrudOperation.GetById) != 0)
                 sb.AppendLine($"    Task<{name}Dto?> GetByIdAsync({pkType} id, CancellationToken ct);");
             sb.AppendLine("}");

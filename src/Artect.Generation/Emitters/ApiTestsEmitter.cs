@@ -347,6 +347,12 @@ public sealed class ApiTestsEmitter : IEmitter
             body.Append(BuildAnonymousRejectionTest(route, crud));
         }
 
+        // V#11 acceptance #3: prove the sort allowlist rejects unknown fields with 400.
+        if ((crud & CrudOperation.GetList) != 0)
+        {
+            body.Append(BuildUnknownSortFieldTest(route));
+        }
+
         if ((crud & CrudOperation.Delete) != 0)
         {
             body.AppendLine();
@@ -688,6 +694,27 @@ public sealed class ApiTestsEmitter : IEmitter
         sb.AppendLine($"        var actual = await getAfter.Content.ReadFromJsonAsync<{entityName}Response>().ConfigureAwait(false);");
         sb.AppendLine("        Assert.NotNull(actual);");
         sb.AppendLine($"        Assert.Null(actual!.{nullableProp});");
+        sb.AppendLine("    }");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// V#11: prove the sort allowlist rejects unknown fields with HTTP 400. The test
+    /// hits <c>GET /api/&lt;route&gt;?sort=__nonexistent_field__</c> and asserts the
+    /// response is 400 BadRequest. <see cref="ReadServiceEmitter"/>'s allowlist
+    /// throws <c>QueryValidationException</c> which the GlobalExceptionHandler maps to
+    /// a 400 ValidationProblemDetails.
+    /// </summary>
+    static string BuildUnknownSortFieldTest(string route)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine();
+        sb.AppendLine("    [Fact]");
+        sb.AppendLine($"    public async System.Threading.Tasks.Task Get_list_returns_400_for_unknown_sort_field()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        using var client = _factory.CreateClient();");
+        sb.AppendLine($"        var response = await client.GetAsync(\"/api/{route}?sort=__nonexistent_field__\").ConfigureAwait(false);");
+        sb.AppendLine("        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);");
         sb.AppendLine("    }");
         return sb.ToString();
     }

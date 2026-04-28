@@ -18,15 +18,16 @@ public sealed class ProductionMiddlewareEmitter : IEmitter
         var ns = $"{project}.Api.Middleware";
         var dir = $"{CleanLayout.ApiDir(project)}/Middleware";
         var domainCommonNs = CleanLayout.DomainCommonNamespace(project);
+        var appAbsNs = CleanLayout.ApplicationAbstractionsNamespace(project);
 
         return new[]
         {
-            new EmittedFile($"{dir}/GlobalExceptionHandler.cs", BuildGlobalExceptionHandler(ns, domainCommonNs)),
+            new EmittedFile($"{dir}/GlobalExceptionHandler.cs", BuildGlobalExceptionHandler(ns, domainCommonNs, appAbsNs)),
             new EmittedFile($"{dir}/CorrelationIdMiddleware.cs", BuildCorrelationIdMiddleware(ns)),
         };
     }
 
-    static string BuildGlobalExceptionHandler(string ns, string domainCommonNs)
+    static string BuildGlobalExceptionHandler(string ns, string domainCommonNs, string appAbsNs)
     {
         var sb = new StringBuilder();
         sb.AppendLine("using Microsoft.AspNetCore.Diagnostics;");
@@ -34,6 +35,7 @@ public sealed class ProductionMiddlewareEmitter : IEmitter
         sb.AppendLine("using Microsoft.AspNetCore.Mvc;");
         sb.AppendLine("using Microsoft.Extensions.Logging;");
         sb.AppendLine($"using {domainCommonNs};");
+        sb.AppendLine($"using {appAbsNs};");
         sb.AppendLine();
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
@@ -54,6 +56,23 @@ public sealed class ProductionMiddlewareEmitter : IEmitter
         sb.AppendLine("            {");
         sb.AppendLine("                validation.Errors[group.Key] = group.Select(e => e.Message).ToArray();");
         sb.AppendLine("            }");
+        sb.AppendLine("            validation.Extensions[\"traceId\"] = httpContext.TraceIdentifier;");
+        sb.AppendLine("            httpContext.Response.StatusCode = validation.Status.Value;");
+        sb.AppendLine("            await httpContext.Response.WriteAsJsonAsync(validation, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            return true;");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        // V#11: invalid query parameter (unknown sort field, out-of-range page size, etc.).");
+        sb.AppendLine("        if (exception is QueryValidationException qve)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var validation = new ValidationProblemDetails");
+        sb.AppendLine("            {");
+        sb.AppendLine("                Status = StatusCodes.Status400BadRequest,");
+        sb.AppendLine("                Title  = \"Invalid query parameter.\",");
+        sb.AppendLine("                Type   = \"https://datatracker.ietf.org/doc/html/rfc7231#section-6.5.1\",");
+        sb.AppendLine("                Instance = httpContext.Request.Path,");
+        sb.AppendLine("            };");
+        sb.AppendLine("            validation.Errors[qve.Parameter] = new[] { qve.Message };");
         sb.AppendLine("            validation.Extensions[\"traceId\"] = httpContext.TraceIdentifier;");
         sb.AppendLine("            httpContext.Response.StatusCode = validation.Status.Value;");
         sb.AppendLine("            await httpContext.Response.WriteAsJsonAsync(validation, cancellationToken).ConfigureAwait(false);");

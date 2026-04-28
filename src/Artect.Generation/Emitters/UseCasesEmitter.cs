@@ -33,9 +33,32 @@ public sealed class UseCasesEmitter : IEmitter
                 CleanLayout.ApplicationAbstractionsPath(project, "IQueryHandler"),
                 BuildQueryHandler(ns)),
             new EmittedFile(
+                CleanLayout.ApplicationAbstractionsPath(project, "QueryValidationException"),
+                BuildQueryValidationException(ns)),
+            new EmittedFile(
                 $"{CleanLayout.ApplicationDir(project)}/UseCases/README.md",
                 BuildReadme(project)),
         };
+    }
+
+    static string BuildQueryValidationException(string ns)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("using System;");
+        sb.AppendLine();
+        sb.AppendLine($"namespace {ns};");
+        sb.AppendLine();
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine("/// V#11: thrown by read services when an HTTP query parameter is invalid (unknown");
+        sb.AppendLine("/// sort field, out-of-range page size, malformed filter, etc.). The");
+        sb.AppendLine("/// GlobalExceptionHandler maps this to HTTP 400 ValidationProblemDetails so");
+        sb.AppendLine("/// callers see a clear 'why' rather than a 500.");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine("public sealed class QueryValidationException(string parameter, string message) : Exception(message)");
+        sb.AppendLine("{");
+        sb.AppendLine("    public string Parameter { get; } = parameter;");
+        sb.AppendLine("}");
+        return sb.ToString();
     }
 
     static string BuildCommandHandler(string ns)

@@ -22,7 +22,7 @@ public static class YamlReader
             "projectName","outputDirectory","targetFramework","dataAccess","emitRepositoriesAndAbstractions",
             "generatedByLabel","generateInitialMigration","crud","apiVersioning","auth",
             "includeTestsProject","includeDockerAssets","partitionStoredProceduresBySchema",
-            "includeChildCollectionsInResponses","validateForeignKeyReferences","schemas","connectionString",
+            "includeChildCollectionsInResponses","validateForeignKeyReferences","maxPageSize","schemas","connectionString",
             "namingCorrections","tableClassifications","columnMetadata"
         };
         foreach (var k in values.Keys)
@@ -48,6 +48,7 @@ public static class YamlReader
             PartitionStoredProceduresBySchema: ParseBool(Require("partitionStoredProceduresBySchema")),
             IncludeChildCollectionsInResponses: ParseBool(Require("includeChildCollectionsInResponses")),
             ValidateForeignKeyReferences: ParseBool(Require("validateForeignKeyReferences")),
+            MaxPageSize: values.TryGetValue("maxPageSize", out var mps) && int.TryParse(mps.Trim(), out var mpsParsed) && mpsParsed > 0 ? mpsParsed : 100,
             Schemas: ParseStringList(Require("schemas")),
             NamingCorrections: values.TryGetValue("namingCorrections", out var nc) ? ParseMap(nc) : new Dictionary<string, string>(),
             TableClassifications: values.TryGetValue("tableClassifications", out var tc) ? ParseClassifications(tc) : new Dictionary<string, EntityClassification>(),

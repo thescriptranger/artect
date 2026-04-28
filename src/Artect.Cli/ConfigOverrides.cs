@@ -22,6 +22,7 @@ public static class ConfigOverrides
         IncludeDockerAssets = ParseBool(args.Get("docker"), baseline.IncludeDockerAssets),
         PartitionStoredProceduresBySchema = ParseBool(args.Get("partition-sprocs-by-schema"), baseline.PartitionStoredProceduresBySchema),
         IncludeChildCollectionsInResponses = ParseBool(args.Get("child-collections"), baseline.IncludeChildCollectionsInResponses),
+        MaxPageSize = args.Get("max-page-size") is { } mps && int.TryParse(mps, out var mpsParsed) && mpsParsed > 0 ? mpsParsed : baseline.MaxPageSize,
         Schemas = args.Get("schemas") is { } s ? s.Split(',').Select(x => x.Trim()).ToList() : baseline.Schemas,
     };
 
