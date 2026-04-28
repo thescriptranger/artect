@@ -35,6 +35,7 @@ public static class EmitterRegistry
         new EnumEmitter(),
         new HandlerEmitter(),
         new InfrastructureDiEmitter(),
+        new InfrastructureInterceptorsEmitter(),
         new InfrastructureTestsEmitter(),
         new LaunchSettingsEmitter(),
         new MigrationsEmitter(),

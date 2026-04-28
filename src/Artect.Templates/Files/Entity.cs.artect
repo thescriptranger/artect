@@ -66,4 +66,12 @@ public sealed partial class {{ EntityName }}
         return new {{ DomainCommonNamespace }}.Result<{{ EntityName }}>.Success(this);
     }
 {{/if}}
+{{# if EmitSoftDelete }}
+
+    public {{ DomainCommonNamespace }}.Result<{{ EntityName }}> SoftDelete()
+    {
+        {{ SoftDeleteAssignment }}
+        return new {{ DomainCommonNamespace }}.Result<{{ EntityName }}>.Success(this);
+    }
+{{/if}}
 }

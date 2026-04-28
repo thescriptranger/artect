@@ -38,6 +38,12 @@ public sealed class DbContextEmitter : IEmitter
         var dbCtx     = $"{project}DbContext";
         var entityNs  = $"{CleanLayout.DomainNamespace(project)}.Entities";
         var infraNs   = $"{CleanLayout.InfrastructureNamespace(project)}.Data";
+        var appAbsNs  = CleanLayout.ApplicationAbstractionsNamespace(project);
+
+        // V#12 conditional behaviors. We only inject ITenantContext + tenant-aware query
+        // filters when at least one entity actually uses TenantId; ditto for soft delete.
+        var anyTenant = model.Entities.Any(e => e.AnyColumnHasFlag(ColumnMetadata.TenantId));
+        var anySoftDelete = model.Entities.Any(e => e.AnyColumnHasFlag(ColumnMetadata.SoftDeleteFlag));
 
         var collidedEntityNames = model.DbSets.EntityTypeNames.Values
             .GroupBy(v => v, System.StringComparer.Ordinal)
@@ -48,12 +54,30 @@ public sealed class DbContextEmitter : IEmitter
         var sb = new StringBuilder();
         sb.AppendLine("using Microsoft.EntityFrameworkCore;");
         sb.AppendLine($"using {entityNs};");
+        if (anyTenant)
+            sb.AppendLine($"using {appAbsNs};");
         sb.AppendLine();
         sb.AppendLine($"namespace {infraNs};");
         sb.AppendLine();
         sb.AppendLine($"public sealed partial class {dbCtx} : DbContext");
         sb.AppendLine("{");
-        sb.AppendLine($"    public {dbCtx}(DbContextOptions<{dbCtx}> options) : base(options) {{ }}");
+        if (anyTenant)
+        {
+            // V#12: tenant-aware filter expression needs the current tenant id at model
+            // build time. EF Core captures the parameterized expression once per
+            // DbContext instance; switching tenants therefore requires a new DbContext
+            // (which is the standard scoped-DbContext pattern in ASP.NET).
+            sb.AppendLine("    private readonly ITenantContext _tenantContext;");
+            sb.AppendLine();
+            sb.AppendLine($"    public {dbCtx}(DbContextOptions<{dbCtx}> options, ITenantContext tenantContext) : base(options)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        _tenantContext = tenantContext;");
+            sb.AppendLine("    }");
+        }
+        else
+        {
+            sb.AppendLine($"    public {dbCtx}(DbContextOptions<{dbCtx}> options) : base(options) {{ }}");
+        }
         sb.AppendLine();
 
         foreach (var entity in model.Entities)
@@ -93,6 +117,52 @@ public sealed class DbContextEmitter : IEmitter
 
         // Per-entity configuration is split out into IEntityTypeConfiguration classes.
         sb.AppendLine($"        modelBuilder.ApplyConfigurationsFromAssembly(typeof({dbCtx}).Assembly);");
+
+        // V#12: emit query filters for SoftDeleteFlag and TenantId columns. Filters live
+        // here (rather than in EntityConfigurations/) so the tenant filter can capture
+        // _tenantContext from the DbContext instance — IEntityTypeConfiguration<T>
+        // doesn't have a clean handle on instance state.
+        if (anySoftDelete || anyTenant)
+        {
+            sb.AppendLine();
+            sb.AppendLine("        // V#12: tenancy + soft-delete query filters. Combined per entity so EF Core's");
+            sb.AppendLine("        // 'last filter wins' semantics don't accidentally drop one of them.");
+            foreach (var entity in model.Entities.OrderBy(e => e.EntityTypeName, System.StringComparer.Ordinal))
+            {
+                var softDeleteCol = entity.FirstColumnWithFlag(ColumnMetadata.SoftDeleteFlag);
+                var tenantCol     = entity.FirstColumnWithFlag(ColumnMetadata.TenantId);
+                if (softDeleteCol is null && tenantCol is null) continue;
+                if (entity.ShouldSkip(
+                    EntityClassification.AggregateRoot,
+                    EntityClassification.OwnedEntity,
+                    EntityClassification.ReadModel,
+                    EntityClassification.LookupData)) continue;
+
+                var entityRef = collidedEntityNames.Contains(entity.EntityTypeName)
+                    ? $"{entityNs}.{entity.EntityTypeName}"
+                    : entity.EntityTypeName;
+
+                var predicates = new List<string>();
+                if (softDeleteCol is not null)
+                {
+                    var prop = EntityNaming.PropertyName(softDeleteCol, ctx.NamingCorrections);
+                    predicates.Add(softDeleteCol.ClrType switch
+                    {
+                        Artect.Core.Schema.ClrType.Boolean        => $"!e.{prop}",
+                        Artect.Core.Schema.ClrType.DateTime       => $"e.{prop} == null",
+                        Artect.Core.Schema.ClrType.DateTimeOffset => $"e.{prop} == null",
+                        _ => $"!e.{prop}", // ConfigValidator rejects others; defensive default.
+                    });
+                }
+                if (tenantCol is not null)
+                {
+                    var prop = EntityNaming.PropertyName(tenantCol, ctx.NamingCorrections);
+                    predicates.Add($"e.{prop} == _tenantContext.CurrentTenantId");
+                }
+                var predicate = string.Join(" && ", predicates);
+                sb.AppendLine($"        modelBuilder.Entity<{entityRef}>().HasQueryFilter(e => {predicate});");
+            }
+        }
 
         // View configurations stay inline — views don't fit the IEntityTypeConfiguration pattern
         // because they're keyless and the schema-derived view CLR type isn't enumerated by

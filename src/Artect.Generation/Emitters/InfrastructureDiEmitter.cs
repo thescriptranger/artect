@@ -18,12 +18,20 @@ public sealed class InfrastructureDiEmitter : IEmitter
         var infraNs = CleanLayout.InfrastructureNamespace(project);
         var appAbsNs = CleanLayout.ApplicationAbstractionsNamespace(project);
         var sprocNs  = CleanLayout.InfrastructureStoredProceduresNamespace(project);
+        var interceptorsNs = $"{infraNs}.Interceptors";
 
         // V#7: collect sproc + function interface/impl pairs that need DI registration.
         // Names match what StoredProceduresEmitter / DbFunctionsEmitter generate.
         var sprocPairs = BuildSprocRegistrations(ctx);
         var functionPairs = BuildFunctionRegistrations(ctx);
         var hasSprocOrFunc = sprocPairs.Count > 0 || functionPairs.Count > 0;
+
+        // V#12: when any entity uses Audit / TenantId we must register the SaveChanges
+        // interceptor and (for Tenant) bind ITenantContext. NoTenantContext is the
+        // shipped placeholder; users override in their own DI extension method.
+        var anyAudit = ctx.Model.Entities.Any(e => e.AnyColumnHasFlag(ColumnMetadata.Audit));
+        var anyTenant = ctx.Model.Entities.Any(e => e.AnyColumnHasFlag(ColumnMetadata.TenantId));
+        var hasInterceptor = anyAudit || anyTenant;
 
         var sb = new StringBuilder();
         sb.AppendLine("using Microsoft.EntityFrameworkCore;");
@@ -33,6 +41,8 @@ public sealed class InfrastructureDiEmitter : IEmitter
         sb.AppendLine($"using {appAbsNs};");
         if (hasSprocOrFunc)
             sb.AppendLine($"using {sprocNs};");
+        if (hasInterceptor)
+            sb.AppendLine($"using {interceptorsNs};");
 
         var repoEntities = ctx.Model.Entities
             .Where(e => !e.ShouldSkip(EntityClassification.AggregateRoot))
@@ -62,7 +72,29 @@ public sealed class InfrastructureDiEmitter : IEmitter
         sb.AppendLine("                \"Missing connection string 'DefaultConnection'. Set it in appsettings.json, \" +");
         sb.AppendLine("                \"appsettings.Development.json, or the ConnectionStrings__DefaultConnection environment variable.\");");
         sb.AppendLine();
-        sb.AppendLine($"        services.AddDbContext<{dbCtx}>(options => options.UseSqlServer(connectionString));");
+        if (anyTenant)
+        {
+            sb.AppendLine("        // V#12: ship a placeholder tenant context that returns Guid.Empty so the");
+            sb.AppendLine("        // generated solution compiles and runs out of the box. Replace this binding");
+            sb.AppendLine("        // (e.g. in Api.AddApi) with an HttpContext-aware impl that reads the tenant");
+            sb.AppendLine("        // claim from the authenticated user before going to production.");
+            sb.AppendLine("        services.AddScoped<ITenantContext, NoTenantContext>();");
+        }
+        if (hasInterceptor)
+        {
+            sb.AppendLine("        // V#12: SaveChanges interceptor centralizes audit + tenant stamping. Scoped");
+            sb.AppendLine("        // because it depends on the request-scoped ITenantContext.");
+            sb.AppendLine("        services.AddScoped<AuditingSaveChangesInterceptor>();");
+            sb.AppendLine($"        services.AddDbContext<{dbCtx}>((sp, options) =>");
+            sb.AppendLine("        {");
+            sb.AppendLine("            options.UseSqlServer(connectionString);");
+            sb.AppendLine("            options.AddInterceptors(sp.GetRequiredService<AuditingSaveChangesInterceptor>());");
+            sb.AppendLine("        });");
+        }
+        else
+        {
+            sb.AppendLine($"        services.AddDbContext<{dbCtx}>(options => options.UseSqlServer(connectionString));");
+        }
         sb.AppendLine("        services.AddScoped<IUnitOfWork, EfUnitOfWork>();");
         sb.AppendLine();
 

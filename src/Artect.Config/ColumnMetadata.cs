@@ -12,4 +12,6 @@ public enum ColumnMetadata
     Audit               = 1 << 3,
     Sensitive           = 1 << 4,
     Deprecated          = 1 << 5,
+    SoftDeleteFlag      = 1 << 6,
+    TenantId            = 1 << 7,
 }

@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+using Artect.Config;
 
 namespace Artect.Generation.Emitters;
 
@@ -24,7 +26,7 @@ public sealed class UseCasesEmitter : IEmitter
         var project = ctx.Config.ProjectName;
         var ns = CleanLayout.ApplicationAbstractionsNamespace(project);
 
-        return new[]
+        var files = new List<EmittedFile>
         {
             new EmittedFile(
                 CleanLayout.ApplicationAbstractionsPath(project, "ICommandHandler"),
@@ -39,6 +41,40 @@ public sealed class UseCasesEmitter : IEmitter
                 $"{CleanLayout.ApplicationDir(project)}/UseCases/README.md",
                 BuildReadme(project)),
         };
+
+        // V#12: emit ITenantContext only when at least one entity has a TenantId column.
+        // Putting the abstraction in Application.Abstractions keeps Infrastructure (which
+        // implements DbContext + interceptors) inverted: it depends on this contract, not
+        // on a concrete HttpContext-aware type. Api supplies the real implementation.
+        var anyTenant = ctx.Model.Entities.Any(e => e.AnyColumnHasFlag(ColumnMetadata.TenantId));
+        if (anyTenant)
+        {
+            files.Add(new EmittedFile(
+                CleanLayout.ApplicationAbstractionsPath(project, "ITenantContext"),
+                BuildTenantContext(ns)));
+        }
+
+        return files;
+    }
+
+    static string BuildTenantContext(string ns)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("using System;");
+        sb.AppendLine();
+        sb.AppendLine($"namespace {ns};");
+        sb.AppendLine();
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine("/// V#12: provides the current request's tenant identity to the read/write side.");
+        sb.AppendLine("/// The DbContext applies a HasQueryFilter against this value so cross-tenant rows");
+        sb.AppendLine("/// are invisible. The audit interceptor stamps it on insert. Implementations");
+        sb.AppendLine("/// typically read the tenant claim from <c>HttpContext.User</c> in the Api layer.");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine("public interface ITenantContext");
+        sb.AppendLine("{");
+        sb.AppendLine("    Guid CurrentTenantId { get; }");
+        sb.AppendLine("}");
+        return sb.ToString();
     }
 
     static string BuildQueryValidationException(string ns)

@@ -87,8 +87,20 @@ public sealed class RepositoryEmitter : IEmitter
         if ((crud & CrudOperation.Delete) != 0)
         {
             sb.AppendLine();
-            sb.AppendLine($"    public void Remove({name} entity) =>");
-            sb.AppendLine($"        db.{dbset}.Remove(entity);");
+            // V#12: when the entity carries a SoftDeleteFlag column, Remove() calls the
+            // entity's SoftDelete() domain method instead of physically deleting the row.
+            // EF tracks the flag mutation; the DbContext's HasQueryFilter then hides the
+            // soft-deleted row from subsequent queries unless IgnoreQueryFilters() is used.
+            if (entity.AnyColumnHasFlag(ColumnMetadata.SoftDeleteFlag))
+            {
+                sb.AppendLine($"    public void Remove({name} entity) =>");
+                sb.AppendLine($"        entity.SoftDelete();");
+            }
+            else
+            {
+                sb.AppendLine($"    public void Remove({name} entity) =>");
+                sb.AppendLine($"        db.{dbset}.Remove(entity);");
+            }
         }
 
         sb.AppendLine("}");

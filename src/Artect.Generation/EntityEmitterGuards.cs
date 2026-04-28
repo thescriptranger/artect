@@ -16,6 +16,21 @@ public static class EntityEmitterGuards
         e.ColumnMetadata.TryGetValue(columnName, out var meta) && (meta & flag) == flag;
 
     /// <summary>
+    /// True when any column on this entity has the given metadata flag set. Useful for
+    /// "does this entity participate in audit / tenancy / soft-delete?" queries.
+    /// </summary>
+    public static bool AnyColumnHasFlag(this NamedEntity e, ColumnMetadata flag) =>
+        e.Table.Columns.Any(c => e.ColumnHasFlag(c.Name, flag));
+
+    /// <summary>
+    /// Returns the first column on this entity carrying the given metadata flag, or null
+    /// when no column has it. V#12 uses this to find the SoftDeleteFlag / TenantId column
+    /// per entity for query-filter generation.
+    /// </summary>
+    public static Column? FirstColumnWithFlag(this NamedEntity e, ColumnMetadata flag) =>
+        e.Table.Columns.FirstOrDefault(c => e.ColumnHasFlag(c.Name, flag));
+
+    /// <summary>
     /// V#2 source of truth for which columns may be mutated by an entity Update method
     /// or referenced by an Update/Patch handler. Excludes Ignored, server-generated,
     /// primary-key, and ProtectedFromUpdate columns.

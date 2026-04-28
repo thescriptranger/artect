@@ -58,6 +58,29 @@ public sealed class EntityEmitter : IEmitter
 
         var emitBehavior = entity.EmitsBehavior();
 
+        // V#12: when the entity carries a SoftDeleteFlag column AND emits behavior, we
+        // generate a SoftDelete() domain method that the repository's Remove() calls
+        // instead of physically deleting. The exact assignment depends on the flag
+        // column's CLR type — bool flips to true, nullable DateTime/DateTimeOffset stamps
+        // UtcNow.
+        string? softDeleteAssignment = null;
+        if (emitBehavior)
+        {
+            var softDeleteCol = entity.FirstColumnWithFlag(ColumnMetadata.SoftDeleteFlag);
+            if (softDeleteCol is not null)
+            {
+                var prop = Artect.Naming.EntityNaming.PropertyName(softDeleteCol, corrections);
+                softDeleteAssignment = softDeleteCol.ClrType switch
+                {
+                    ClrType.Boolean        => $"{prop} = true;",
+                    ClrType.DateTime       => $"{prop} = System.DateTime.UtcNow;",
+                    ClrType.DateTimeOffset => $"{prop} = System.DateTimeOffset.UtcNow;",
+                    _ => null,
+                };
+            }
+        }
+        var emitSoftDelete = softDeleteAssignment is not null;
+
         return new
         {
             HasUsingNamespaces = false,
@@ -68,6 +91,8 @@ public sealed class EntityEmitter : IEmitter
             EmitBehavior = emitBehavior,
             SetterModifier = emitBehavior ? "private set" : "init",
             EmitUpdateMethod = emitBehavior && updateArgs.Count > 0,
+            EmitSoftDelete = emitSoftDelete,
+            SoftDeleteAssignment = softDeleteAssignment ?? string.Empty,
             Columns = visibleColumns.Select(c => new
             {
                 ClrTypeWithNullability = ClrTypeString(c),

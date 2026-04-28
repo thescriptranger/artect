@@ -62,7 +62,30 @@ public static class ConfigValidator
             foreach (var c in t.Value)
             {
                 if (!columnNames.Contains(c.Key))
+                {
                     errors.Add($"columnMetadata: '{t.Key}.{c.Key}' does not match any column on table '{t.Key}'.");
+                    continue;
+                }
+
+                // V#12 type checks: SoftDeleteFlag must be bool / nullable date; TenantId must be Guid.
+                var col = table.Columns.First(x => string.Equals(x.Name, c.Key, StringComparison.Ordinal));
+                if ((c.Value & ColumnMetadata.SoftDeleteFlag) == ColumnMetadata.SoftDeleteFlag)
+                {
+                    var ok = col.ClrType switch
+                    {
+                        ClrType.Boolean        => true,
+                        ClrType.DateTime       => col.IsNullable,
+                        ClrType.DateTimeOffset => col.IsNullable,
+                        _ => false,
+                    };
+                    if (!ok)
+                        errors.Add($"columnMetadata: '{t.Key}.{c.Key}' is flagged SoftDeleteFlag but its type is {col.ClrType}{(col.IsNullable ? "?" : "")}. Allowed types: bool, DateTime?, DateTimeOffset?.");
+                }
+                if ((c.Value & ColumnMetadata.TenantId) == ColumnMetadata.TenantId)
+                {
+                    if (col.ClrType != ClrType.Guid)
+                        errors.Add($"columnMetadata: '{t.Key}.{c.Key}' is flagged TenantId but its type is {col.ClrType}. TenantId must be Guid.");
+                }
             }
         }
 
