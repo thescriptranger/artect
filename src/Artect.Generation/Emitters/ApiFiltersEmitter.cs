@@ -34,14 +34,6 @@ public sealed class ApiFiltersEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
-        sb.AppendLine("/// <summary>");
-        sb.AppendLine("/// Generic endpoint filter that validates the first <typeparamref name=\"TRequest\"/>");
-        sb.AppendLine("/// argument against the registered <see cref=\"IValidator{T}\"/> and short-circuits");
-        sb.AppendLine("/// with a 400 ProblemDetails response if invalid. Wire via");
-        sb.AppendLine("/// <c>.AddEndpointFilter&lt;ValidationFilter&lt;TRequest&gt;&gt;()</c> on a route.");
-        sb.AppendLine("/// V#8: pulls validation out of every endpoint lambda — endpoints become thin");
-        sb.AppendLine("/// translators (request → command → handler → response).");
-        sb.AppendLine("/// </summary>");
         sb.AppendLine("public sealed class ValidationFilter<TRequest>(IValidator<TRequest> validator) : IEndpointFilter");
         sb.AppendLine("{");
         sb.AppendLine("    public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)");

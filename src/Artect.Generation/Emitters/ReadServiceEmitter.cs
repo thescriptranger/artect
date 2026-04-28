@@ -121,9 +121,6 @@ public sealed class ReadServiceEmitter : IEmitter
 
     static void EmitAllowedSortFields(StringBuilder sb, IReadOnlyList<Column> sortableCols, IReadOnlyDictionary<string, string> corrections)
     {
-        sb.AppendLine("    // V#11: allowlist for the ?sort query parameter. Computed from the entity's");
-        sb.AppendLine("    // visible columns at generate time. Comparison is case-insensitive so");
-        sb.AppendLine("    // ?sort=customerId and ?sort=CustomerId both resolve to the same field.");
         sb.AppendLine("    private static readonly System.Collections.Generic.IReadOnlyDictionary<string, string> _allowedSortFields =");
         sb.AppendLine("        new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase)");
         sb.AppendLine("        {");
@@ -141,9 +138,6 @@ public sealed class ReadServiceEmitter : IEmitter
     {
         sb.AppendLine($"    public async Task<(IReadOnlyList<{name}Dto> Items, int TotalCount)> GetPagedAsync(int page, int pageSize, string? sort, CancellationToken ct)");
         sb.AppendLine("    {");
-        sb.AppendLine("        // V#11: clamp paging into a known-safe range. Out-of-range values are");
-        sb.AppendLine("        // silently snapped rather than rejected — callers using defaults should");
-        sb.AppendLine("        // not hit a 400. Hostile callers asking for huge pages get the cap.");
         sb.AppendLine("        if (page < 1) page = 1;");
         sb.AppendLine("        if (pageSize < 1) pageSize = 50;");
         sb.AppendLine($"        if (pageSize > {maxPageSize}) pageSize = {maxPageSize};");
@@ -167,8 +161,6 @@ public sealed class ReadServiceEmitter : IEmitter
         sb.AppendLine("                var (field, desc) = sortItems[i];");
         sb.AppendLine("                ordered = ApplyChainedSort(ordered, field, desc);");
         sb.AppendLine("            }");
-        sb.AppendLine("            // V#11: PK is always the final tie-breaker so pagination is deterministic");
-        sb.AppendLine("            // even when the user-supplied sort columns have ties.");
         sb.AppendLine($"            ordered = ordered.ThenBy(e => e.{pkProp});");
         sb.AppendLine("        }");
         sb.AppendLine();
@@ -194,9 +186,6 @@ public sealed class ReadServiceEmitter : IEmitter
     static void EmitParseSort(StringBuilder sb)
     {
         sb.AppendLine();
-        sb.AppendLine("    // V#11: parses comma-separated sort tokens (\"name,-createdAt\") into");
-        sb.AppendLine("    // (canonical-field, descending) pairs. A leading '-' marks descending.");
-        sb.AppendLine("    // Unknown fields throw QueryValidationException → 400 ProblemDetails.");
         sb.AppendLine("    private static System.Collections.Generic.List<(string Field, bool Descending)> ParseSort(string? sort)");
         sb.AppendLine("    {");
         sb.AppendLine("        var items = new System.Collections.Generic.List<(string, bool)>();");

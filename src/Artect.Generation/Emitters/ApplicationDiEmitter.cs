@@ -30,12 +30,6 @@ public sealed class ApplicationDiEmitter : IEmitter
         sb.AppendLine("{");
         sb.AppendLine("    public static IServiceCollection AddApplication(this IServiceCollection services)");
         sb.AppendLine("    {");
-        sb.AppendLine("        // V#15: assembly-scan registration for all generated and hand-written use cases.");
-        sb.AppendLine("        // 1. Concrete *Handler classes register as themselves so endpoints can inject");
-        sb.AppendLine("        //    the concrete handler (e.g., CreateCustomerHandler).");
-        sb.AppendLine("        // 2. The same types also register against every ICommandHandler<,> / IQueryHandler<,>");
-        sb.AppendLine("        //    interface they implement, so future decorators (validation, transaction,");
-        sb.AppendLine("        //    audit, authorization) can wrap generated and hand-written handlers uniformly.");
         sb.AppendLine("        var assembly = typeof(DependencyInjection).Assembly;");
         sb.AppendLine("        foreach (var type in assembly.GetTypes())");
         sb.AppendLine("        {");

@@ -62,7 +62,6 @@ public sealed class ProductionMiddlewareEmitter : IEmitter
         sb.AppendLine("            return true;");
         sb.AppendLine("        }");
         sb.AppendLine();
-        sb.AppendLine("        // V#11: invalid query parameter (unknown sort field, out-of-range page size, etc.).");
         sb.AppendLine("        if (exception is QueryValidationException qve)");
         sb.AppendLine("        {");
         sb.AppendLine("            var validation = new ValidationProblemDetails");

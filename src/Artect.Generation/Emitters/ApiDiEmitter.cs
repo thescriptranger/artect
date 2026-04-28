@@ -40,9 +40,6 @@ public sealed class ApiDiEmitter : IEmitter
         if (registerValidationFilter)
         {
             sb.AppendLine();
-            sb.AppendLine("        // V#8: register the generic ValidationFilter so endpoints can wire it via");
-            sb.AppendLine("        // .AddEndpointFilter<ValidationFilter<TRequest>>(). The open-generic");
-            sb.AppendLine("        // registration covers every closed TRequest used in routes.");
             sb.AppendLine("        services.AddTransient(typeof(ValidationFilter<>));");
         }
         sb.AppendLine("        return services;");

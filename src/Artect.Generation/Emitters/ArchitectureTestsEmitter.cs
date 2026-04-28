@@ -78,11 +78,6 @@ public sealed class ArchitectureTestsEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine($"namespace {testsNs};");
         sb.AppendLine();
-        sb.AppendLine("/// <summary>");
-        sb.AppendLine("/// V#14: Clean Architecture dependency-rule tests. Each test loads an inner-");
-        sb.AppendLine("/// layer assembly and asserts none of its types reference outer-layer namespaces.");
-        sb.AppendLine("/// Failures list the offending types so the fix is mechanical.");
-        sb.AppendLine("/// </summary>");
         sb.AppendLine("public class LayerDependencyTests");
         sb.AppendLine("{");
         sb.AppendLine($"    static Assembly Domain() => Assembly.Load(\"{domain}\");");
@@ -144,13 +139,6 @@ public sealed class ArchitectureTestsEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine($"namespace {testsNs};");
         sb.AppendLine();
-        sb.AppendLine("/// <summary>");
-        sb.AppendLine("/// V#15 acceptance #3: missing handler/repository registrations fail at test time,");
-        sb.AppendLine("/// not at runtime under load. For every IRepository- and IReadService-derived");
-        sb.AppendLine("/// interface declared in Application, this asserts exactly one concrete");
-        sb.AppendLine("/// implementation lives in Infrastructure. The marker-driven scan in");
-        sb.AppendLine("/// Infrastructure.DependencyInjection then picks the impl up automatically.");
-        sb.AppendLine("/// </summary>");
         sb.AppendLine("public class RegistrationCompletenessTests");
         sb.AppendLine("{");
         sb.AppendLine($"    static Assembly Application() => Assembly.Load(\"{application}\");");

@@ -70,24 +70,16 @@ public sealed class InfrastructureDiEmitter : IEmitter
         sb.AppendLine();
         if (anyTenant)
         {
-            sb.AppendLine("        // V#12: ship a placeholder tenant context that returns Guid.Empty so the");
-            sb.AppendLine("        // generated solution compiles and runs out of the box. Replace this binding");
-            sb.AppendLine("        // (e.g. in Api.AddApi) with an HttpContext-aware impl that reads the tenant");
-            sb.AppendLine("        // claim from the authenticated user before going to production.");
             sb.AppendLine("        services.AddScoped<ITenantContext, NoTenantContext>();");
         }
         if (hasInterceptor)
         {
             if (hasAuditingInterceptor)
             {
-                sb.AppendLine("        // V#12: SaveChanges interceptor centralizes audit + tenant stamping. Scoped");
-                sb.AppendLine("        // because it depends on the request-scoped ITenantContext.");
                 sb.AppendLine("        services.AddScoped<AuditingSaveChangesInterceptor>();");
             }
             if (emitDomainEvents)
             {
-                sb.AppendLine("        // V#13: outbox interceptor enrolls pending domain events as OutboxMessage rows");
-                sb.AppendLine("        // in the same transaction as the aggregate write — at-least-once delivery.");
                 sb.AppendLine("        services.AddScoped<DomainEventOutboxInterceptor>();");
             }
             sb.AppendLine($"        services.AddDbContext<{dbCtx}>((sp, options) =>");
@@ -106,11 +98,6 @@ public sealed class InfrastructureDiEmitter : IEmitter
         sb.AppendLine("        services.AddScoped<IUnitOfWork, EfUnitOfWork>();");
         sb.AppendLine();
 
-        sb.AppendLine("        // V#15: marker-driven repository + read-service registration. Adding a new");
-        sb.AppendLine("        // aggregate adds zero lines to this file — the scan picks up any concrete");
-        sb.AppendLine("        // type that implements an IRepository-derived or IReadService-derived");
-        sb.AppendLine("        // interface (the markers live in Application.Abstractions). Registration");
-        sb.AppendLine("        // completeness is verified by Architecture.Tests at build time.");
         sb.AppendLine("        var infrastructureAssembly = typeof(DependencyInjection).Assembly;");
         sb.AppendLine("        foreach (var impl in infrastructureAssembly.GetTypes())");
         sb.AppendLine("        {");
@@ -126,9 +113,6 @@ public sealed class InfrastructureDiEmitter : IEmitter
         if (hasSprocOrFunc)
         {
             sb.AppendLine();
-            sb.AppendLine("        // V#7: typed sproc + function wrappers live in Infrastructure. User adapters");
-            sb.AppendLine("        // (in Application/Abstractions ports + Infrastructure/Adapters impls) inject");
-            sb.AppendLine("        // these to translate business intent into procedure calls.");
             foreach (var (iface, impl) in sprocPairs)
                 sb.AppendLine($"        services.AddScoped<{iface}, {impl}>();");
             foreach (var (iface, impl) in functionPairs)
@@ -138,9 +122,6 @@ public sealed class InfrastructureDiEmitter : IEmitter
         if (emitDomainEvents)
         {
             sb.AppendLine();
-            sb.AppendLine("        // V#13: domain-events publishing pipeline. The default publisher logs only —");
-            sb.AppendLine("        // override the IDomainEventPublisher binding (Service Bus, Kafka, etc.) before");
-            sb.AppendLine("        // production. The dispatcher is a hosted service that drains the outbox table.");
             sb.AppendLine("        services.AddScoped<IDomainEventPublisher, LoggingDomainEventPublisher>();");
             sb.AppendLine("        services.AddHostedService<OutboxDispatcher>();");
         }

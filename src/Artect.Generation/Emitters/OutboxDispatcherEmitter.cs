@@ -57,13 +57,6 @@ public sealed class OutboxDispatcherEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
-        sb.AppendLine("/// <summary>");
-        sb.AppendLine("/// V#13 transactional-outbox dispatcher. Polls <c>OutboxMessages</c> for");
-        sb.AppendLine("/// unprocessed rows and publishes them through <see cref=\"IDomainEventPublisher\"/>.");
-        sb.AppendLine("/// Uses a scoped DbContext per poll iteration so EF tracking state stays bounded.");
-        sb.AppendLine("/// Polls every <see cref=\"PollInterval\"/>; tune via configuration if you replace");
-        sb.AppendLine("/// the trivial polling loop with a notification-driven dispatcher.");
-        sb.AppendLine("/// </summary>");
         sb.AppendLine("public sealed class OutboxDispatcher(");
         sb.AppendLine("    IServiceScopeFactory scopeFactory,");
         sb.AppendLine("    ILogger<OutboxDispatcher> logger) : BackgroundService");
@@ -163,12 +156,6 @@ public sealed class OutboxDispatcherEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
-        sb.AppendLine("/// <summary>");
-        sb.AppendLine("/// V#13 default <see cref=\"IDomainEventPublisher\"/>. Logs the event payload at");
-        sb.AppendLine("/// Information level so the generated solution boots without an external broker.");
-        sb.AppendLine("/// Replace with a transport-backed implementation (Service Bus, Kafka, RabbitMQ)");
-        sb.AppendLine("/// before going to production — events are otherwise discarded after logging.");
-        sb.AppendLine("/// </summary>");
         sb.AppendLine("public sealed class LoggingDomainEventPublisher(ILogger<LoggingDomainEventPublisher> logger) : IDomainEventPublisher");
         sb.AppendLine("{");
         sb.AppendLine("    public Task PublishAsync(IDomainEvent domainEvent, CancellationToken ct)");

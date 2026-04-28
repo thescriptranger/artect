@@ -41,14 +41,6 @@ public sealed class OutboxEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
-        sb.AppendLine("/// <summary>");
-        sb.AppendLine("/// V#13: a queued domain-event delivery record. Written by the SaveChanges");
-        sb.AppendLine("/// interceptor in the same transaction as the aggregate; consumed by the");
-        sb.AppendLine("/// outbox dispatcher background service. <see cref=\"ProcessedAtUtc\"/> is set");
-        sb.AppendLine("/// when the publisher succeeds; rows where it remains null are eligible for");
-        sb.AppendLine("/// retry. Lives in Infrastructure because the outbox is a transport detail,");
-        sb.AppendLine("/// not a domain concept.");
-        sb.AppendLine("/// </summary>");
         sb.AppendLine("public sealed class OutboxMessage");
         sb.AppendLine("{");
         sb.AppendLine("    public Guid Id { get; set; }");
@@ -79,8 +71,6 @@ public sealed class OutboxEmitter : IEmitter
         sb.AppendLine("        builder.Property(x => x.EventType).HasMaxLength(512).IsRequired();");
         sb.AppendLine("        builder.Property(x => x.Payload).IsRequired();");
         sb.AppendLine("        builder.Property(x => x.Error).HasMaxLength(2000);");
-        sb.AppendLine("        // Dispatcher reads pending rows in OccurredAtUtc order. The filtered");
-        sb.AppendLine("        // index keeps the seek fast even when the table grows.");
         sb.AppendLine("        builder.HasIndex(x => new { x.ProcessedAtUtc, x.OccurredAtUtc })");
         sb.AppendLine("            .HasFilter(\"[ProcessedAtUtc] IS NULL\");");
         sb.AppendLine("    }");

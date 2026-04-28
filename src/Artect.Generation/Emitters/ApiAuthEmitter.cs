@@ -52,11 +52,6 @@ public sealed class ApiAuthEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
-        sb.AppendLine("/// <summary>");
-        sb.AppendLine("/// V#9 acceptance #3: advertises the configured authentication scheme on the");
-        sb.AppendLine("/// generated OpenAPI document so consumers (Scalar, Swagger UI, code generators)");
-        sb.AppendLine("/// see the security expectations.");
-        sb.AppendLine("/// </summary>");
         sb.AppendLine("public sealed class SecuritySchemeTransformer : IOpenApiDocumentTransformer");
         sb.AppendLine("{");
         sb.AppendLine("    public Task TransformAsync(OpenApiDocument document, OpenApiDocumentTransformerContext context, CancellationToken cancellationToken)");
@@ -113,11 +108,6 @@ public sealed class ApiAuthEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
-        sb.AppendLine("/// <summary>");
-        sb.AppendLine("/// V#9 ApiKey scheme handler. Reads the X-Api-Key header and compares against");
-        sb.AppendLine("/// <c>Auth:ApiKey</c> in configuration. Replace with a real implementation that");
-        sb.AppendLine("/// looks up the key in a secret store / DB before going to production.");
-        sb.AppendLine("/// </summary>");
         sb.AppendLine("public sealed class ApiKeyAuthenticationHandler(");
         sb.AppendLine("    IOptionsMonitor<AuthenticationSchemeOptions> options,");
         sb.AppendLine("    ILoggerFactory logger,");

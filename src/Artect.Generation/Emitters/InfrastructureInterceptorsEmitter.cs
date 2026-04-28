@@ -74,13 +74,6 @@ public sealed class InfrastructureInterceptorsEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
-        sb.AppendLine("/// <summary>");
-        sb.AppendLine("/// V#13: enrolls pending <see cref=\"IDomainEvent\"/>s from every");
-        sb.AppendLine("/// <see cref=\"IHasDomainEvents\"/> aggregate as <see cref=\"OutboxMessage\"/> rows in the");
-        sb.AppendLine("/// same transaction as the aggregate write — the canonical transactional-outbox");
-        sb.AppendLine("/// pattern. Out-of-band delivery is the dispatcher's job; here we just guarantee");
-        sb.AppendLine("/// no event is lost on commit and no event escapes a rollback.");
-        sb.AppendLine("/// </summary>");
         sb.AppendLine("public sealed class DomainEventOutboxInterceptor : SaveChangesInterceptor");
         sb.AppendLine("{");
         sb.AppendLine("    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)");
@@ -168,13 +161,6 @@ public sealed class InfrastructureInterceptorsEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
-        sb.AppendLine("/// <summary>");
-        sb.AppendLine("/// V#12 SaveChanges interceptor. Centralizes audit-field stamping and tenant-id");
-        sb.AppendLine("/// stamping for every Added / Modified entity. Audit columns flagged");
-        sb.AppendLine("/// `ProtectedFromUpdate` are stamped on Insert only (CreatedAtUtc pattern);");
-        sb.AppendLine("/// audit columns without that flag are stamped on every save (UpdatedAtUtc).");
-        sb.AppendLine("/// TenantId columns are stamped on Insert from <see cref=\"ITenantContext.CurrentTenantId\"/>.");
-        sb.AppendLine("/// </summary>");
         if (tenantInjected)
             sb.AppendLine("public sealed class AuditingSaveChangesInterceptor(ITenantContext tenantContext) : SaveChangesInterceptor");
         else
@@ -246,13 +232,6 @@ public sealed class InfrastructureInterceptorsEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine($"namespace {infraNs};");
         sb.AppendLine();
-        sb.AppendLine("/// <summary>");
-        sb.AppendLine("/// V#12 default <see cref=\"ITenantContext\"/> implementation. Returns Guid.Empty so");
-        sb.AppendLine("/// the generated solution compiles and runs out of the box. Replace with a real");
-        sb.AppendLine("/// HttpContext-aware implementation in the Api layer (read the tenant claim from");
-        sb.AppendLine("/// the authenticated user) and re-register before going to production —");
-        sb.AppendLine("/// otherwise every row is stamped Guid.Empty and every query filters on Guid.Empty.");
-        sb.AppendLine("/// </summary>");
         sb.AppendLine("public sealed class NoTenantContext : ITenantContext");
         sb.AppendLine("{");
         sb.AppendLine("    public Guid CurrentTenantId => Guid.Empty;");

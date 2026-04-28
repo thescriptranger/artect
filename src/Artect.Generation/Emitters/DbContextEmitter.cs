@@ -137,8 +137,6 @@ public sealed class DbContextEmitter : IEmitter
         if (anySoftDelete || anyTenant)
         {
             sb.AppendLine();
-            sb.AppendLine("        // V#12: tenancy + soft-delete query filters. Combined per entity so EF Core's");
-            sb.AppendLine("        // 'last filter wins' semantics don't accidentally drop one of them.");
             foreach (var entity in model.Entities.OrderBy(e => e.EntityTypeName, System.StringComparer.Ordinal))
             {
                 var softDeleteCol = entity.FirstColumnWithFlag(ColumnMetadata.SoftDeleteFlag);

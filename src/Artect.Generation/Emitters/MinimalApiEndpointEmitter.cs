@@ -100,10 +100,6 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine($"namespace {endpointNs};");
         sb.AppendLine();
-        sb.AppendLine("// V#6 scaffolded CRUD baseline — generated from schema. Real business workflows");
-        sb.AppendLine("// belong in their own endpoint files (or behind a different route prefix) and");
-        sb.AppendLine("// should call ICommandHandler<,> / IQueryHandler<,> from " + project + ".Application.Abstractions");
-        sb.AppendLine("// rather than the per-aggregate concrete handlers below.");
         sb.AppendLine($"public static partial class {plural}Endpoints");
         sb.AppendLine("{");
         if (versioningEnabled)
@@ -154,9 +150,6 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
         // throws QueryValidationException → 400 for unknown fields.
         sb.AppendLine($"        group.MapGet(\"/\", async (I{name}ReadService reads, CancellationToken ct, int page = 1, int pageSize = 50, string? sort = null) =>");
         sb.AppendLine("        {");
-        sb.AppendLine("            // Page / pageSize clamping happens inside the read service so the cap is");
-        sb.AppendLine("            // applied uniformly whether the call comes from this endpoint or a hand-");
-        sb.AppendLine("            // written use case.");
         sb.AppendLine("            var (items, totalCount) = await reads.GetPagedAsync(page, pageSize, sort, ct).ConfigureAwait(false);");
         sb.AppendLine($"            return Results.Ok(new PagedResponse<{name}Response>");
         sb.AppendLine("            {");
