@@ -1,3 +1,9 @@
+{{# if HasUsings }}
+{{# for ns in Usings }}
+using {{ ns }};
+{{/for}}
+
+{{/if}}
 namespace {{ Namespace }};
 
 public sealed record {{ Kind }}{{ EntityName }}Request

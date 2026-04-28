@@ -4,16 +4,22 @@ using Artect.Config;
 using Artect.Core.Schema;
 using Artect.Naming;
 using Artect.Templating;
+using Artect.Templating.Ast;
 
 namespace Artect.Generation.Emitters;
 
 public sealed class RequestEmitter : IEmitter
 {
+    enum RequestKind { Create, Update, Patch }
+
     public IReadOnlyList<EmittedFile> Emit(EmitterContext ctx)
     {
         var template = TemplateParser.Parse(ctx.Templates.Load("Request.cs.artect"));
         var list = new List<EmittedFile>();
-        var ns = $"{CleanLayout.SharedNamespace(ctx.Config.ProjectName)}.Requests";
+        var project = ctx.Config.ProjectName;
+        var ns = $"{CleanLayout.SharedNamespace(project)}.Requests";
+        var sharedCommonNs = $"{project}.Shared.Common";
+        var emitPatch = (ctx.Config.Crud & CrudOperation.Patch) != 0;
 
         foreach (var entity in ctx.Model.Entities)
         {
@@ -22,37 +28,48 @@ public sealed class RequestEmitter : IEmitter
             var pkCols = entity.Table.PrimaryKey!.ColumnNames
                 .ToHashSet(System.StringComparer.OrdinalIgnoreCase);
 
-            // Create request: skip PK (identity) columns
-            var createProps = BuildProperties(entity, pkCols, isCreate: true, ctx.NamingCorrections);
-            var createData = new
-            {
-                Namespace = ns,
-                Kind = "Create",
-                EntityName = entity.EntityTypeName,
-                Properties = createProps,
-            };
-            var createRendered = Renderer.Render(template, createData);
-            var createPath = CleanLayout.SharedRequestPath(ctx.Config.ProjectName, entity.EntityTypeName, "Create");
-            list.Add(new EmittedFile(createPath, createRendered));
+            // Create request: skip server-generated PK columns.
+            list.Add(BuildRequest(template, ns, "Create", entity, pkCols, RequestKind.Create, ctx.NamingCorrections, project, sharedCommonNs));
 
-            // Update request: include PK columns
-            var updateProps = BuildProperties(entity, pkCols, isCreate: false, ctx.NamingCorrections);
-            var updateData = new
+            // Update request: include PK + non-server-gen + non-protected columns.
+            list.Add(BuildRequest(template, ns, "Update", entity, pkCols, RequestKind.Update, ctx.NamingCorrections, project, sharedCommonNs));
+
+            // V#5 Patch request: same shape as Update, but every non-PK field wrapped
+            // in Optional<T?> so the deserializer can distinguish "absent" from
+            // "present with null" from "present with a value."
+            if (emitPatch)
             {
-                Namespace = ns,
-                Kind = "Update",
-                EntityName = entity.EntityTypeName,
-                Properties = updateProps,
-            };
-            var updateRendered = Renderer.Render(template, updateData);
-            var updatePath = CleanLayout.SharedRequestPath(ctx.Config.ProjectName, entity.EntityTypeName, "Update");
-            list.Add(new EmittedFile(updatePath, updateRendered));
+                list.Add(BuildRequest(template, ns, "Patch", entity, pkCols, RequestKind.Patch, ctx.NamingCorrections, project, sharedCommonNs));
+            }
         }
 
         return list;
     }
 
-    static IReadOnlyList<object> BuildProperties(NamedEntity entity, HashSet<string> pkCols, bool isCreate, System.Collections.Generic.IReadOnlyDictionary<string, string> corrections)
+    static EmittedFile BuildRequest(
+        TemplateDocument template, string ns, string kind, NamedEntity entity,
+        HashSet<string> pkCols, RequestKind requestKind,
+        IReadOnlyDictionary<string, string> corrections, string project, string sharedCommonNs)
+    {
+        var props = BuildProperties(entity, pkCols, requestKind, corrections);
+        var usings = requestKind == RequestKind.Patch
+            ? (IReadOnlyList<string>)new[] { sharedCommonNs }
+            : System.Array.Empty<string>();
+        var data = new
+        {
+            Namespace = ns,
+            Kind = kind,
+            EntityName = entity.EntityTypeName,
+            Properties = props,
+            HasUsings = usings.Count > 0,
+            Usings = usings,
+        };
+        var rendered = Renderer.Render(template, data);
+        var path = CleanLayout.SharedRequestPath(project, entity.EntityTypeName, kind);
+        return new EmittedFile(path, rendered);
+    }
+
+    static IReadOnlyList<object> BuildProperties(NamedEntity entity, HashSet<string> pkCols, RequestKind kind, IReadOnlyDictionary<string, string> corrections)
     {
         var result = new List<object>();
         foreach (var c in entity.Table.Columns)
@@ -61,15 +78,15 @@ public sealed class RequestEmitter : IEmitter
             if (entity.ColumnHasFlag(c.Name, ColumnMetadata.Ignored)) continue;
 
             var isPk = pkCols.Contains(c.Name);
-            if (isCreate)
+            if (kind == RequestKind.Create)
             {
                 // Create: skip server-generated PK (DB assigns it).
                 if (isPk && c.IsServerGenerated) continue;
             }
             else
             {
-                // V#3 Update: keep PK (URL identifier) + updateable columns. Drop
-                // ProtectedFromUpdate (domain method controls those) and non-PK
+                // V#3 Update / V#5 Patch: keep PK (URL identifier) + updateable columns.
+                // Drop ProtectedFromUpdate (domain method controls those) and non-PK
                 // server-generated columns (DB controls those — audit/concurrency).
                 if (entity.ColumnHasFlag(c.Name, ColumnMetadata.ProtectedFromUpdate)) continue;
                 if (!isPk && c.IsServerGenerated) continue;
@@ -84,10 +101,24 @@ public sealed class RequestEmitter : IEmitter
             else
                 clrTypeWithNullability = csBase;
 
-            var required = !c.IsNullable && c.ClrType == ClrType.String;
+            // V#5: For Patch, wrap non-PK fields in Optional<T?>. The inner type is
+            // always nullable so JSON null is deserializable — the domain Update method
+            // decides whether the supplied null is valid for that field.
+            var wrapInOptional = kind == RequestKind.Patch && !isPk;
+            if (wrapInOptional)
+            {
+                var inner = clrTypeWithNullability.EndsWith("?", System.StringComparison.Ordinal)
+                    ? clrTypeWithNullability
+                    : clrTypeWithNullability + "?";
+                clrTypeWithNullability = $"Optional<{inner}>";
+            }
+
+            var required = !c.IsNullable && c.ClrType == ClrType.String && !wrapInOptional;
             var hasStringLength = c.ClrType == ClrType.String && c.MaxLength is > 0;
             var stringLength = hasStringLength ? c.MaxLength!.Value : 0;
-            var initializer = !c.IsNullable && c.ClrType == ClrType.String ? " = string.Empty;" : string.Empty;
+            // Optional<T> defaults to HasValue=false naturally; no initializer needed.
+            // Plain non-nullable strings still need = string.Empty;.
+            var initializer = !wrapInOptional && !c.IsNullable && c.ClrType == ClrType.String ? " = string.Empty;" : string.Empty;
 
             result.Add(new
             {

@@ -33,11 +33,13 @@ public sealed class CommandRecordsEmitter : IEmitter
             var updateCols = UpdateCommandColumns(entity);
 
             if ((crud & CrudOperation.Post) != 0)
-                list.Add(BuildRecord(ctx, entity, $"Create{name}Command", nonServerGen));
+                list.Add(BuildRecord(ctx, entity, $"Create{name}Command", nonServerGen, wrapNonPkInOptional: false));
             if ((crud & CrudOperation.Put) != 0)
-                list.Add(BuildRecord(ctx, entity, $"Update{name}Command", updateCols));
+                list.Add(BuildRecord(ctx, entity, $"Update{name}Command", updateCols, wrapNonPkInOptional: false));
+            // V#5: Patch command wraps non-PK fields in Optional<T?> so the handler
+            // can apply only the fields the client sent. PK stays plain (URL ID).
             if ((crud & CrudOperation.Patch) != 0)
-                list.Add(BuildRecord(ctx, entity, $"Patch{name}Command", updateCols));
+                list.Add(BuildRecord(ctx, entity, $"Patch{name}Command", updateCols, wrapNonPkInOptional: true));
         }
         return list;
     }
@@ -62,13 +64,18 @@ public sealed class CommandRecordsEmitter : IEmitter
         return pkColumns.Concat(entity.UpdateableColumns()).ToList();
     }
 
-    static EmittedFile BuildRecord(EmitterContext ctx, NamedEntity entity, string recordName, IReadOnlyList<Column> cols)
+    static EmittedFile BuildRecord(EmitterContext ctx, NamedEntity entity, string recordName, IReadOnlyList<Column> cols, bool wrapNonPkInOptional)
     {
         var project = ctx.Config.ProjectName;
         var ns = CleanLayout.ApplicationFeatureNamespace(project, entity.EntityTypeName);
         var corrections = ctx.NamingCorrections;
+        var pkColNames = entity.Table.PrimaryKey?.ColumnNames
+            .ToHashSet(System.StringComparer.OrdinalIgnoreCase)
+            ?? new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
 
         var sb = new StringBuilder();
+        if (wrapNonPkInOptional)
+            sb.AppendLine($"using {project}.Shared.Common;");
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
         sb.AppendLine($"public sealed record {recordName}(");
@@ -79,6 +86,15 @@ public sealed class CommandRecordsEmitter : IEmitter
             var propType = col.IsNullable && (SqlTypeMap.IsValueType(col.ClrType) || col.ClrType == ClrType.String)
                 ? cs + "?"
                 : cs;
+            // V#5: Patch wraps non-PK fields in Optional<T?>. Inner is always nullable so
+            // JSON null is deserializable; the domain Update method validates whether
+            // null is acceptable for that field at apply time.
+            var isPk = pkColNames.Contains(col.Name);
+            if (wrapNonPkInOptional && !isPk)
+            {
+                var inner = propType.EndsWith("?", System.StringComparison.Ordinal) ? propType : propType + "?";
+                propType = $"Optional<{inner}>";
+            }
             var propName = EntityNaming.PropertyName(col, corrections);
             var terminator = i == cols.Count - 1 ? ");" : ",";
             sb.AppendLine($"    {propType} {propName}{terminator}");

@@ -97,8 +97,10 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
             EmitPost(sb, name, route, pkProp, nonServerGenCols, corrections);
         if ((crud & CrudOperation.Put) != 0)
             EmitUpdate(sb, name, pkColName, pkProp, pkType, pkRouteConstraint, allCols, corrections, verb: "Put", commandPrefix: "Update");
+        // V#5: PATCH uses dedicated PatchXxxRequest (Optional<T?> fields) and PatchXxxHandler.
+        // Domain Update method validates after merge; no API-level validator.
         if ((crud & CrudOperation.Patch) != 0)
-            EmitUpdate(sb, name, pkColName, pkProp, pkType, pkRouteConstraint, allCols, corrections, verb: "Patch", commandPrefix: "Patch");
+            EmitPatch(sb, name, pkColName, pkProp, pkType, pkRouteConstraint, entity, corrections);
         if ((crud & CrudOperation.Delete) != 0)
             EmitDelete(sb, name, pkType, pkRouteConstraint);
 
@@ -182,6 +184,46 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
             var prop = EntityNaming.PropertyName(col, corrections);
             var value = string.Equals(col.Name, pkColName, System.StringComparison.OrdinalIgnoreCase) ? "id" : $"request.{prop}";
             var terminator = i == allCols.Count - 1 ? ");" : ",";
+            sb.AppendLine($"                {value}{terminator}");
+        }
+        sb.AppendLine();
+        sb.AppendLine("            var entity = await handler.HandleAsync(command, ct).ConfigureAwait(false);");
+        sb.AppendLine("            return entity is null ? Results.NotFound() : Results.Ok(entity.ToResponse());");
+        sb.AppendLine("        });");
+        sb.AppendLine();
+    }
+
+    /// <summary>
+    /// V#5 PATCH endpoint. Deserializes <c>Patch&lt;Entity&gt;Request</c> (whose non-PK
+    /// fields are <c>Optional&lt;T?&gt;</c>), builds <c>Patch&lt;Entity&gt;Command</c>
+    /// 1:1, calls <c>Patch&lt;Entity&gt;Handler</c>. No API-level validator — domain
+    /// <c>Update</c> validates after the handler merges Optional with the existing
+    /// entity.
+    /// </summary>
+    static void EmitPatch(StringBuilder sb, string name, string pkColName, string pkProp, string pkType, string pkRouteConstraint,
+        NamedEntity entity, IReadOnlyDictionary<string, string> corrections)
+    {
+        var commandType = $"Patch{name}Command";
+        var handlerType = $"Patch{name}Handler";
+        var requestType = $"Patch{name}Request";
+
+        // Patch command shape (per CommandRecordsEmitter): PK + UpdateableColumns.
+        var pkCols = entity.Table.PrimaryKey!.ColumnNames
+            .ToHashSet(System.StringComparer.OrdinalIgnoreCase);
+        var commandCols = entity.Table.Columns
+            .Where(c => pkCols.Contains(c.Name) && !entity.ColumnHasFlag(c.Name, ColumnMetadata.Ignored))
+            .Concat(entity.UpdateableColumns())
+            .ToList();
+
+        sb.AppendLine($"        group.MapPatch(\"/{{id{pkRouteConstraint}}}\", async ({pkType} id, {requestType} request, {handlerType} handler, CancellationToken ct) =>");
+        sb.AppendLine("        {");
+        sb.AppendLine($"            var command = new {commandType}(");
+        for (int i = 0; i < commandCols.Count; i++)
+        {
+            var col = commandCols[i];
+            var prop = EntityNaming.PropertyName(col, corrections);
+            var value = string.Equals(col.Name, pkColName, System.StringComparison.OrdinalIgnoreCase) ? "id" : $"request.{prop}";
+            var terminator = i == commandCols.Count - 1 ? ");" : ",";
             sb.AppendLine($"                {value}{terminator}");
         }
         sb.AppendLine();

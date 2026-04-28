@@ -39,7 +39,7 @@ public sealed class HandlerEmitter : IEmitter
             }
             if ((crud & CrudOperation.Patch) != 0)
             {
-                var f = BuildUpdate(ctx, entity, name, "Patch");
+                var f = BuildPatch(ctx, entity, name);
                 if (f is not null) list.Add(f);
             }
             if ((crud & CrudOperation.Delete) != 0)
@@ -174,6 +174,93 @@ public sealed class HandlerEmitter : IEmitter
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine($"    partial void OnBeforeUpdate({commandType} command, {name} existing);");
+        sb.AppendLine($"    partial void OnBeforeCommit({commandType} command, {name} entity);");
+        sb.AppendLine($"    partial void OnAfterCommit({commandType} command, {name} entity);");
+        sb.AppendLine("}");
+
+        var path = CleanLayout.ApplicationFeaturePath(project, name, handlerName);
+        return new EmittedFile(path, sb.ToString());
+    }
+
+    /// <summary>
+    /// V#5: PATCH handler. Each non-PK field on the command is Optional&lt;T?&gt;.
+    /// Fields with HasValue=true are applied; fields with HasValue=false fall back to
+    /// the existing entity's value. The merge is built into the existing.Update(...)
+    /// call so domain invariants are still validated against the final state. Skips
+    /// emission when the entity has no updateable columns.
+    /// </summary>
+    static EmittedFile? BuildPatch(EmitterContext ctx, NamedEntity entity, string name)
+    {
+        var updateArgs = entity.UpdateableColumns();
+        if (updateArgs.Count == 0) return null;
+
+        var project = ctx.Config.ProjectName;
+        var corrections = ctx.NamingCorrections;
+
+        var pk = entity.Table.PrimaryKey!;
+        var pkColName = pk.ColumnNames[0];
+        var pkCol = entity.Table.Columns.First(c =>
+            string.Equals(c.Name, pkColName, System.StringComparison.OrdinalIgnoreCase));
+        var pkProp = EntityNaming.PropertyName(pkCol, corrections);
+
+        var ns         = CleanLayout.ApplicationFeatureNamespace(project, name);
+        var entityNs   = $"{CleanLayout.DomainNamespace(project)}.Entities";
+        var domainNs   = CleanLayout.DomainCommonNamespace(project);
+        var dtosNs     = CleanLayout.ApplicationDtosNamespace(project);
+        var absNs      = CleanLayout.ApplicationFeatureAbstractionsNamespace(project, name);
+        var appAbsNs   = CleanLayout.ApplicationAbstractionsNamespace(project);
+        var mappingsNs = CleanLayout.ApplicationMappingsNamespace(project);
+        var sharedCommonNs = $"{project}.Shared.Common";
+
+        var commandType = $"Patch{name}Command";
+        var handlerName = $"Patch{name}Handler";
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"using {entityNs};");
+        sb.AppendLine($"using {domainNs};");
+        sb.AppendLine($"using {dtosNs};");
+        sb.AppendLine($"using {absNs};");
+        sb.AppendLine($"using {appAbsNs};");
+        sb.AppendLine($"using {mappingsNs};");
+        sb.AppendLine($"using {sharedCommonNs};");
+        sb.AppendLine();
+        sb.AppendLine($"namespace {ns};");
+        sb.AppendLine();
+        sb.AppendLine($"public sealed partial class {handlerName}(I{name}Repository repository, IUnitOfWork unitOfWork)");
+        sb.AppendLine("{");
+        sb.AppendLine($"    public async Task<{name}Dto?> HandleAsync({commandType} command, CancellationToken ct)");
+        sb.AppendLine("    {");
+        sb.AppendLine($"        var existing = await repository.GetByIdAsync(command.{pkProp}, ct).ConfigureAwait(false);");
+        sb.AppendLine("        if (existing is null) return null;");
+        sb.AppendLine();
+        sb.AppendLine("        OnBeforePatch(command, existing);");
+        sb.AppendLine("        var result = existing.Update(");
+        for (int i = 0; i < updateArgs.Count; i++)
+        {
+            var col = updateArgs[i];
+            var prop = EntityNaming.PropertyName(col, corrections);
+            var terminator = i == updateArgs.Count - 1 ? ");" : ",";
+            // Optional<T?>.Value is T?. The entity's Update parameter type is T (matches
+            // the column's nullability). For non-nullable columns, ! forgives the
+            // compile-time nullable annotation; if the user actually sent JSON null, the
+            // domain Update method's invariant check rejects it.
+            var unwrap = col.IsNullable
+                ? ".Value"
+                : SqlTypeMap.IsValueType(col.ClrType) ? ".Value!.Value" : ".Value!";
+            sb.AppendLine($"            command.{prop}.HasValue ? command.{prop}{unwrap} : existing.{prop}{terminator}");
+        }
+        sb.AppendLine();
+        sb.AppendLine($"        if (result is Result<{name}>.Failure failure)");
+        sb.AppendLine("            throw new DomainValidationException(failure.Errors);");
+        sb.AppendLine();
+        sb.AppendLine("        OnBeforeCommit(command, existing);");
+        sb.AppendLine("        await unitOfWork.CommitAsync(ct).ConfigureAwait(false);");
+        sb.AppendLine("        OnAfterCommit(command, existing);");
+        sb.AppendLine();
+        sb.AppendLine($"        return DtoMapper.Map<{name}, {name}Dto>(existing);");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine($"    partial void OnBeforePatch({commandType} command, {name} existing);");
         sb.AppendLine($"    partial void OnBeforeCommit({commandType} command, {name} entity);");
         sb.AppendLine($"    partial void OnAfterCommit({commandType} command, {name} entity);");
         sb.AppendLine("}");

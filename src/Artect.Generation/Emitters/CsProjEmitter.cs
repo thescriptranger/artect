@@ -109,6 +109,10 @@ public sealed class CsProjEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine("  <ItemGroup>");
         sb.AppendLine(ProjectRef($"../{CleanLayout.DomainProjectName(project)}/{CleanLayout.DomainProjectName(project)}.csproj"));
+        // V#5: Application references Shared so the Patch handler can consume Optional<T>
+        // from Shared.Common. The dependency is bounded to that single type — Application
+        // does not consume Requests/Responses/Errors from Shared.
+        sb.AppendLine(ProjectRef($"../{CleanLayout.SharedProjectName(project)}/{CleanLayout.SharedProjectName(project)}.csproj"));
         sb.AppendLine("  </ItemGroup>");
         sb.AppendLine();
         sb.Append("</Project>");

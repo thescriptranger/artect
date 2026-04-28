@@ -47,6 +47,7 @@ public static class EmitterRegistry
         new RepositoryInterfaceEmitter(),
         new RequestEmitter(),
         new ResponseEmitter(),
+        new SharedCommonEmitter(),
         new SlnEmitter(),
         new StoredProceduresEmitter(),
         new UnitOfWorkEmitter(),

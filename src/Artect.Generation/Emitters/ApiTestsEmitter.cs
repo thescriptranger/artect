@@ -173,13 +173,29 @@ public sealed class ApiTestsEmitter : IEmitter
             && (crud & CrudOperation.GetById) != 0
             && (crud & CrudOperation.Put) != 0;
 
+        // V#5: Patch tests, gated on Patch + Post + GetById in CRUD AND single-PK AND
+        // at least one updateable column visible in the Response Dto (Sensitive columns
+        // aren't observable via GET, so we can't assert their state).
+        var updateableVisibleCols = entity.UpdateableColumns()
+            .Where(c => !entity.ColumnHasFlag(c.Name, ColumnMetadata.Sensitive))
+            .ToList();
+        var nullableUpdateableVisibleCols = updateableVisibleCols
+            .Where(c => c.IsNullable)
+            .ToList();
+        var emitV5OmittedTest = updateableVisibleCols.Count > 0
+            && entity.Table.PrimaryKey!.ColumnNames.Count == 1
+            && (crud & CrudOperation.Post) != 0
+            && (crud & CrudOperation.GetById) != 0
+            && (crud & CrudOperation.Patch) != 0;
+        var emitV5NullTest = emitV5OmittedTest && nullableUpdateableVisibleCols.Count > 0;
+
         var usings = new StringBuilder();
         usings.AppendLine("using System.Net;");
-        if (needsPayload || emitV4Test)
+        if (needsPayload || emitV4Test || emitV5OmittedTest)
             usings.AppendLine("using System.Net.Http.Json;");
         if (needsPayload)
             usings.AppendLine($"using {requestsNs};");
-        if (emitV4Test)
+        if (emitV4Test || emitV5OmittedTest)
             usings.AppendLine($"using {responsesNs};");
         usings.AppendLine("using Xunit;");
 
@@ -250,6 +266,16 @@ public sealed class ApiTestsEmitter : IEmitter
         if (emitV4Test)
         {
             body.Append(BuildProtectedFieldsImmutabilityTest(entity, route, protectedVisibleCols, corrections));
+        }
+
+        if (emitV5OmittedTest)
+        {
+            body.Append(BuildPatchOmittedFieldsTest(entity, route, updateableVisibleCols, corrections));
+        }
+
+        if (emitV5NullTest)
+        {
+            body.Append(BuildPatchExplicitNullTest(entity, route, nullableUpdateableVisibleCols[0], corrections));
         }
 
         if ((crud & CrudOperation.Delete) != 0)
@@ -462,6 +488,137 @@ public sealed class ApiTestsEmitter : IEmitter
             var prop = EntityNaming.PropertyName(c, corrections);
             sb.AppendLine($"        Assert.Equal(initial!.{prop}, actual!.{prop});");
         }
+        sb.AppendLine("    }");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// V#5 acceptance #2 + #3: PATCH does not require all PUT fields and omitted fields
+    /// remain unchanged. Test seeds via POST, captures all updateable visible columns
+    /// via GET, sends PATCH with empty body <c>{}</c>, and asserts every captured
+    /// field matches its initial value after the PATCH.
+    /// </summary>
+    static string BuildPatchOmittedFieldsTest(
+        NamedEntity entity, string route,
+        IReadOnlyList<Column> updateableVisibleCols,
+        IReadOnlyDictionary<string, string> corrections)
+    {
+        var entityName = entity.EntityTypeName;
+        var pkCol = entity.Table.Columns.First(c =>
+            string.Equals(c.Name, entity.Table.PrimaryKey!.ColumnNames[0], System.StringComparison.OrdinalIgnoreCase));
+        var pkProp = EntityNaming.PropertyName(pkCol, corrections);
+        var pkColNames = entity.Table.PrimaryKey!.ColumnNames
+            .ToHashSet(System.StringComparer.OrdinalIgnoreCase);
+
+        var sb = new StringBuilder();
+        sb.AppendLine();
+        sb.AppendLine("    [Fact]");
+        sb.AppendLine($"    public async System.Threading.Tasks.Task Patch_omitted_fields_remain_unchanged()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        using var client = _factory.CreateClient();");
+        sb.AppendLine();
+
+        // Seed
+        sb.AppendLine($"        var createRequest = new Create{entityName}Request");
+        sb.AppendLine("        {");
+        foreach (var c in entity.Table.Columns)
+        {
+            if (entity.ColumnHasFlag(c.Name, ColumnMetadata.Ignored)) continue;
+            if (pkColNames.Contains(c.Name) && c.IsServerGenerated) continue;
+            sb.AppendLine($"            {EntityNaming.PropertyName(c, corrections)} = {ValidApiPlaceholder(c)},");
+        }
+        sb.AppendLine("        };");
+        sb.AppendLine($"        var createResponse = await client.PostAsJsonAsync(\"/api/{route}\", createRequest).ConfigureAwait(false);");
+        sb.AppendLine("        createResponse.EnsureSuccessStatusCode();");
+        sb.AppendLine($"        var created = await createResponse.Content.ReadFromJsonAsync<{entityName}Response>().ConfigureAwait(false);");
+        sb.AppendLine("        Assert.NotNull(created);");
+        sb.AppendLine($"        var id = created!.{pkProp};");
+        sb.AppendLine();
+
+        // Capture initial
+        sb.AppendLine($"        var getInitial = await client.GetAsync($\"/api/{route}/{{id}}\").ConfigureAwait(false);");
+        sb.AppendLine("        getInitial.EnsureSuccessStatusCode();");
+        sb.AppendLine($"        var initial = await getInitial.Content.ReadFromJsonAsync<{entityName}Response>().ConfigureAwait(false);");
+        sb.AppendLine("        Assert.NotNull(initial);");
+        sb.AppendLine();
+
+        // PATCH with empty body — no fields supplied, all Optional should be HasValue=false.
+        sb.AppendLine("        var patchContent = new System.Net.Http.StringContent(\"{}\", System.Text.Encoding.UTF8, \"application/json\");");
+        sb.AppendLine($"        var patchResponse = await client.PatchAsync($\"/api/{route}/{{id}}\", patchContent).ConfigureAwait(false);");
+        sb.AppendLine("        patchResponse.EnsureSuccessStatusCode();");
+        sb.AppendLine();
+
+        // GET again, assert each updateable visible field unchanged.
+        sb.AppendLine($"        var getAfter = await client.GetAsync($\"/api/{route}/{{id}}\").ConfigureAwait(false);");
+        sb.AppendLine("        getAfter.EnsureSuccessStatusCode();");
+        sb.AppendLine($"        var actual = await getAfter.Content.ReadFromJsonAsync<{entityName}Response>().ConfigureAwait(false);");
+        sb.AppendLine("        Assert.NotNull(actual);");
+        foreach (var c in updateableVisibleCols)
+        {
+            var prop = EntityNaming.PropertyName(c, corrections);
+            sb.AppendLine($"        Assert.Equal(initial!.{prop}, actual!.{prop});");
+        }
+        sb.AppendLine("    }");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// V#5 acceptance #4: explicit null handling is tested. Test seeds with a non-null
+    /// value for a nullable column, sends PATCH with <c>{ "&lt;Field&gt;": null }</c>,
+    /// and asserts the field is null after. Only fires when the entity has at least
+    /// one nullable updateable column visible in the response Dto.
+    /// </summary>
+    static string BuildPatchExplicitNullTest(
+        NamedEntity entity, string route, Column nullableCol,
+        IReadOnlyDictionary<string, string> corrections)
+    {
+        var entityName = entity.EntityTypeName;
+        var pkCol = entity.Table.Columns.First(c =>
+            string.Equals(c.Name, entity.Table.PrimaryKey!.ColumnNames[0], System.StringComparison.OrdinalIgnoreCase));
+        var pkProp = EntityNaming.PropertyName(pkCol, corrections);
+        var pkColNames = entity.Table.PrimaryKey!.ColumnNames
+            .ToHashSet(System.StringComparer.OrdinalIgnoreCase);
+        var nullableProp = EntityNaming.PropertyName(nullableCol, corrections);
+
+        var sb = new StringBuilder();
+        sb.AppendLine();
+        sb.AppendLine("    [Fact]");
+        sb.AppendLine($"    public async System.Threading.Tasks.Task Patch_explicit_null_sets_nullable_field_to_null()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        using var client = _factory.CreateClient();");
+        sb.AppendLine();
+
+        // Seed with all required fields, including a non-null value for the nullable col.
+        sb.AppendLine($"        var createRequest = new Create{entityName}Request");
+        sb.AppendLine("        {");
+        foreach (var c in entity.Table.Columns)
+        {
+            if (entity.ColumnHasFlag(c.Name, ColumnMetadata.Ignored)) continue;
+            if (pkColNames.Contains(c.Name) && c.IsServerGenerated) continue;
+            sb.AppendLine($"            {EntityNaming.PropertyName(c, corrections)} = {ValidApiPlaceholder(c)},");
+        }
+        sb.AppendLine("        };");
+        sb.AppendLine($"        var createResponse = await client.PostAsJsonAsync(\"/api/{route}\", createRequest).ConfigureAwait(false);");
+        sb.AppendLine("        createResponse.EnsureSuccessStatusCode();");
+        sb.AppendLine($"        var created = await createResponse.Content.ReadFromJsonAsync<{entityName}Response>().ConfigureAwait(false);");
+        sb.AppendLine("        Assert.NotNull(created);");
+        sb.AppendLine($"        var id = created!.{pkProp};");
+        sb.AppendLine();
+
+        // PATCH with explicit null for the nullable field.
+        sb.AppendLine("        var jsonNode = new System.Text.Json.Nodes.JsonObject();");
+        sb.AppendLine($"        jsonNode[\"{nullableProp}\"] = null;");
+        sb.AppendLine("        var patchContent = new System.Net.Http.StringContent(jsonNode.ToJsonString(), System.Text.Encoding.UTF8, \"application/json\");");
+        sb.AppendLine($"        var patchResponse = await client.PatchAsync($\"/api/{route}/{{id}}\", patchContent).ConfigureAwait(false);");
+        sb.AppendLine("        patchResponse.EnsureSuccessStatusCode();");
+        sb.AppendLine();
+
+        // Verify field is null.
+        sb.AppendLine($"        var getAfter = await client.GetAsync($\"/api/{route}/{{id}}\").ConfigureAwait(false);");
+        sb.AppendLine("        getAfter.EnsureSuccessStatusCode();");
+        sb.AppendLine($"        var actual = await getAfter.Content.ReadFromJsonAsync<{entityName}Response>().ConfigureAwait(false);");
+        sb.AppendLine("        Assert.NotNull(actual);");
+        sb.AppendLine($"        Assert.Null(actual!.{nullableProp});");
         sb.AppendLine("    }");
         return sb.ToString();
     }
