@@ -8,9 +8,15 @@ using Artect.Naming;
 namespace Artect.Generation.Emitters;
 
 /// <summary>
-/// Emits <c>IStoredProcedures</c> (and optionally per-schema variants when
-/// <c>cfg.PartitionStoredProceduresBySchema</c> is true) plus a companion
-/// implementation class. Only runs when the graph contains stored procedures.
+/// V#7: emits stored-procedure typed wrappers into Infrastructure (not Application).
+/// Application code must NOT depend on these — it uses business-named ports defined
+/// by the user (e.g., <c>ICustomerRiskReader</c>) which are implemented in
+/// Infrastructure adapters that inject the typed wrapper here.
+///
+/// Emits <c>IStoredProcedures</c> (or per-schema variants when
+/// <c>cfg.PartitionStoredProceduresBySchema</c> is true) plus its implementation,
+/// plus a README explaining the V#7 pattern. Only runs when the graph contains
+/// stored procedures.
 ///
 /// <list type="bullet">
 /// <item>Parameter classes are emitted inline for each procedure.</item>
@@ -31,7 +37,7 @@ public sealed class StoredProceduresEmitter : IEmitter
 
         var list    = new List<EmittedFile>();
         var project = ctx.Config.ProjectName;
-        var ns      = $"{CleanLayout.ApplicationNamespace(project)}.StoredProcedures";
+        var ns      = CleanLayout.InfrastructureStoredProceduresNamespace(project);
         var da      = ctx.Config.DataAccess;
 
         if (ctx.Config.PartitionStoredProceduresBySchema)
@@ -60,8 +66,59 @@ public sealed class StoredProceduresEmitter : IEmitter
             EmitPair(list, project, ns, da, "IStoredProcedures", "StoredProcedures", sprocs);
         }
 
+        list.Add(new EmittedFile(
+            $"{CleanLayout.InfrastructureDir(project)}/StoredProcedures/README.md",
+            BuildReadme(project)));
+
         return list;
     }
+
+    static string BuildReadme(string project) => $$"""
+        # Stored procedures (V#7)
+
+        Typed wrappers for the database's stored procedures and table-valued / scalar
+        functions, generated from the schema. They live in **Infrastructure** because
+        stored-procedure invocation is a persistence concern — the Application layer
+        must not depend on them.
+
+        ## Pattern: business-named ports
+
+        1. Define a **business-named port** in `{{project}}.Application.Abstractions`:
+
+           ```csharp
+           namespace {{project}}.Application.Abstractions;
+
+           public interface ICustomerRiskReader
+           {
+               Task<RiskScore> GetRiskAsync(Guid customerId, CancellationToken ct);
+           }
+           ```
+
+        2. Implement it in `{{project}}.Infrastructure` (e.g. an `Adapters/` folder),
+           injecting the typed wrapper from this folder:
+
+           ```csharp
+           namespace {{project}}.Infrastructure.Adapters;
+
+           internal sealed class CustomerRiskReader(IStoredProcedures sprocs)
+               : ICustomerRiskReader
+           {
+               public async Task<RiskScore> GetRiskAsync(Guid customerId, CancellationToken ct)
+               {
+                   var rows = await sprocs.GetCustomerRiskScoreAsync(
+                       new GetCustomerRiskScoreParameters { CustomerId = customerId }, ct);
+                   return RiskScore.FromRow(rows.Single());
+               }
+           }
+           ```
+
+        3. Register the adapter in `Infrastructure.AddInfrastructure(...)` —
+           `IStoredProcedures` itself is already registered for you.
+
+        Result: Application sees only `ICustomerRiskReader` (business intent).
+        Infrastructure has the typed sproc wrapper (database mechanics) and the
+        adapter that translates between them.
+        """;
 
     // ── Core emitter ─────────────────────────────────────────────────────────
 
@@ -106,7 +163,7 @@ public sealed class StoredProceduresEmitter : IEmitter
         }
         ifaceSb.AppendLine("}");
 
-        var ifacePath = CleanLayout.SprocInterfacePath(project, ifaceName);
+        var ifacePath = CleanLayout.InfrastructureStoredProceduresPath(project, ifaceName);
         list.Add(new EmittedFile(ifacePath, ifaceSb.ToString()));
 
         // ── Implementation file ───────────────────────────────────────────────
@@ -176,7 +233,7 @@ public sealed class StoredProceduresEmitter : IEmitter
 
         implSb.AppendLine("}");
 
-        var implPath = CleanLayout.SprocInterfacePath(project, implName);
+        var implPath = CleanLayout.InfrastructureStoredProceduresPath(project, implName);
         list.Add(new EmittedFile(implPath, implSb.ToString()));
     }
 

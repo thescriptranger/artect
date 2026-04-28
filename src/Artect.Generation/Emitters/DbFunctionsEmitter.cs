@@ -7,10 +7,13 @@ using Artect.Naming;
 namespace Artect.Generation.Emitters;
 
 /// <summary>
-/// Emits <c>I{Schema}DbFunctions</c> (and a companion implementation stub) into
-/// <c>src/&lt;Project&gt;.Application/StoredProcedures/</c>.
-/// Only runs when the schema graph contains at least one function.
-/// Each schema gets its own interface/implementation pair.
+/// V#7: emits <c>I{Schema}DbFunctions</c> + impl stubs into
+/// <c>src/&lt;Project&gt;.Infrastructure/StoredProcedures/</c>. DB functions are a
+/// persistence concern and must not be exposed in Application — users define
+/// business-named ports (see the V#7 README emitted by
+/// <see cref="StoredProceduresEmitter"/>) and adapt them in Infrastructure.
+/// Only runs when the schema graph contains at least one function. Each schema
+/// gets its own interface/implementation pair.
 /// </summary>
 public sealed class DbFunctionsEmitter : IEmitter
 {
@@ -21,7 +24,7 @@ public sealed class DbFunctionsEmitter : IEmitter
 
         var list    = new List<EmittedFile>();
         var project = ctx.Config.ProjectName;
-        var ns      = $"{CleanLayout.ApplicationNamespace(project)}.StoredProcedures";
+        var ns      = CleanLayout.InfrastructureStoredProceduresNamespace(project);
 
         // Group by schema — each schema gets its own interface+impl pair.
         var bySchema = ctx.Graph.Functions
@@ -54,7 +57,7 @@ public sealed class DbFunctionsEmitter : IEmitter
 
             ifaceSb.AppendLine("}");
 
-            var ifacePath = CleanLayout.SprocInterfacePath(project, ifaceName);
+            var ifacePath = CleanLayout.InfrastructureStoredProceduresPath(project,ifaceName);
             list.Add(new EmittedFile(ifacePath, ifaceSb.ToString()));
 
             // ── Implementation stub ───────────────────────────────────────────
@@ -78,7 +81,7 @@ public sealed class DbFunctionsEmitter : IEmitter
 
             implSb.AppendLine("}");
 
-            var implPath = CleanLayout.SprocInterfacePath(project, implName);
+            var implPath = CleanLayout.InfrastructureStoredProceduresPath(project,implName);
             list.Add(new EmittedFile(implPath, implSb.ToString()));
         }
 

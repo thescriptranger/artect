@@ -31,8 +31,12 @@ public static class CleanLayout
     public static string SharedPagedResponsePath(string root) => $"{SharedDir(root)}/Responses/PagedResponse.cs";
     public static string SharedEnumPath(string root, string enumName) => $"{SharedDir(root)}/Enums/{enumName}.cs";
     public static string SharedErrorPath(string root, string className) => $"{SharedDir(root)}/Errors/{className}.cs";
-    public static string SprocInterfacePath(string root, string name) => $"{ApplicationDir(root)}/StoredProcedures/{name}.cs";
-    public static string DbFunctionsInterfacePath(string root) => $"{ApplicationDir(root)}/StoredProcedures/IDbFunctions.cs";
+    // V#7: stored-procedure typed wrappers live in Infrastructure (persistence is an
+    // infrastructure concern). Application abstractions for the same data must be
+    // hand-written as business-named ports (e.g., ICustomerRiskReader) and adapted in
+    // Infrastructure to call the typed wrappers below.
+    public static string InfrastructureStoredProceduresPath(string root, string name) => $"{InfrastructureDir(root)}/StoredProcedures/{name}.cs";
+    public static string InfrastructureStoredProceduresNamespace(string root) => $"{root}.Infrastructure.StoredProcedures";
 
     // DI installer extensions
     public static string ApplicationInstallerPath(string root) => $"{ApplicationDir(root)}/DependencyInjection/ApplicationServiceCollectionExtensions.cs";
