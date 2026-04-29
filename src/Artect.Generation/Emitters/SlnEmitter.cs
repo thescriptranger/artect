@@ -3,16 +3,10 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using Artect.Config;
 
 namespace Artect.Generation.Emitters;
 
-/// <summary>
-/// Emits <c>&lt;Project&gt;.sln</c> at the scaffold root. Source projects are
-/// grouped under a <c>src</c> solution folder and test projects under a
-/// <c>tests</c> solution folder so Visual Studio's Solution Explorer matches
-/// the on-disk layout. GUIDs are derived deterministically from the project's
-/// relative .csproj path so the file is byte-identical across machines.
-/// </summary>
 public sealed class SlnEmitter : IEmitter
 {
     private const string CsharpSdkProjectTypeGuid  = "9A19103F-16F7-4668-BE54-9A1E7A4F7556";
@@ -48,6 +42,32 @@ public sealed class SlnEmitter : IEmitter
             testPaths.Add($"tests/{archTests}/{archTests}.csproj");
         }
 
+        return cfg.TargetFramework == TargetFramework.Net10_0
+            ? new[] { new EmittedFile($"{project}.slnx", BuildSlnx(srcPaths, testPaths)) }
+            : new[] { new EmittedFile($"{project}.sln", BuildSln(project, srcPaths, testPaths)) };
+    }
+
+    static string BuildSlnx(IReadOnlyList<string> srcPaths, IReadOnlyList<string> testPaths)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("<Solution>");
+        sb.AppendLine("  <Folder Name=\"/src/\">");
+        foreach (var p in srcPaths)
+            sb.AppendLine($"    <Project Path=\"{p}\" />");
+        sb.AppendLine("  </Folder>");
+        if (testPaths.Count > 0)
+        {
+            sb.AppendLine("  <Folder Name=\"/tests/\">");
+            foreach (var p in testPaths)
+                sb.AppendLine($"    <Project Path=\"{p}\" />");
+            sb.AppendLine("  </Folder>");
+        }
+        sb.Append("</Solution>");
+        return sb.ToString();
+    }
+
+    static string BuildSln(string project, IReadOnlyList<string> srcPaths, IReadOnlyList<string> testPaths)
+    {
         var projectTypeGuid = "{" + CsharpSdkProjectTypeGuid + "}";
         var folderTypeGuid  = "{" + SolutionFolderTypeGuid + "}";
         var slnGuid         = StableGuid($"sln::{project}").ToString("B").ToUpperInvariant();
@@ -68,7 +88,6 @@ public sealed class SlnEmitter : IEmitter
         sb.AppendLine("Microsoft Visual Studio Solution File, Format Version 12.00");
         sb.AppendLine("# Visual Studio Version 17");
 
-        // Concrete projects first, then the solution folders.
         foreach (var (name, path, guid) in allEntries)
         {
             sb.AppendFormat(CultureInfo.InvariantCulture,
@@ -110,7 +129,6 @@ public sealed class SlnEmitter : IEmitter
         sb.AppendLine("\t\tHideSolutionNode = FALSE");
         sb.AppendLine("\tEndGlobalSection");
 
-        // Parent each concrete project under its solution folder.
         sb.AppendLine("\tGlobalSection(NestedProjects) = preSolution");
         foreach (var (_, _, guid) in srcEntries)
             sb.AppendFormat(CultureInfo.InvariantCulture, "\t\t{0} = {1}", guid, srcFolderGuid).AppendLine();
@@ -123,7 +141,7 @@ public sealed class SlnEmitter : IEmitter
         sb.AppendLine("\tEndGlobalSection");
         sb.Append("EndGlobal");
 
-        return new[] { new EmittedFile($"{project}.sln", sb.ToString()) };
+        return sb.ToString();
     }
 
     static (string AssemblyName, string BackslashPath, string Guid) BuildEntry(string csprojPath)
@@ -134,7 +152,6 @@ public sealed class SlnEmitter : IEmitter
         return (assemblyName, backslash, guid);
     }
 
-    // Deterministic GUID: MD5 of UTF-8 seed → 16 bytes → Guid
     static Guid StableGuid(string seed)
     {
         var bytes = MD5.HashData(Encoding.UTF8.GetBytes(seed));
