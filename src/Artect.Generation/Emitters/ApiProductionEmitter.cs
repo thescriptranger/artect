@@ -118,8 +118,8 @@ public sealed class ApiProductionEmitter : IEmitter
         sb.AppendLine("                else");
         sb.AppendLine("                {");
         sb.AppendLine("                    policy.WithOrigins(origins)");
-        sb.AppendLine("                          .AllowAnyHeader()");
-        sb.AppendLine("                          .AllowAnyMethod()");
+        sb.AppendLine("                          .WithMethods(\"GET\", \"POST\", \"PUT\", \"PATCH\", \"DELETE\", \"OPTIONS\")");
+        sb.AppendLine("                          .WithHeaders(\"Authorization\", \"Content-Type\", \"X-Correlation-ID\", \"X-Api-Key\")");
         sb.AppendLine("                          .AllowCredentials();");
         sb.AppendLine("                }");
         sb.AppendLine("            });");
