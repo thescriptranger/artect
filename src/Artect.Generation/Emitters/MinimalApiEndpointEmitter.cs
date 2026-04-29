@@ -145,15 +145,12 @@ public sealed class MinimalApiEndpointEmitter : IEmitter
 
     static void EmitGetList(StringBuilder sb, string name)
     {
-        // V#11: ?sort accepts comma-separated fields (with optional leading '-' for
-        // descending). The ReadService validates against a per-entity allowlist and
-        // throws QueryValidationException → 400 for unknown fields.
         sb.AppendLine($"        group.MapGet(\"/\", async (I{name}ReadService reads, CancellationToken ct, int page = 1, int pageSize = 50, string? sort = null) =>");
         sb.AppendLine("        {");
         sb.AppendLine("            var (items, totalCount) = await reads.GetPagedAsync(page, pageSize, sort, ct).ConfigureAwait(false);");
-        sb.AppendLine($"            return Results.Ok(new PagedResponse<{name}Response>");
+        sb.AppendLine($"            return Results.Ok(new PagedResponse<{name}SummaryResponse>");
         sb.AppendLine("            {");
-        sb.AppendLine("                Items = items.Select(e => e.ToResponse()).ToList(),");
+        sb.AppendLine("                Items = items.Select(e => e.ToSummaryResponse()).ToList(),");
         sb.AppendLine("                Page = page,");
         sb.AppendLine("                PageSize = pageSize,");
         sb.AppendLine("                TotalCount = totalCount,");

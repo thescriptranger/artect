@@ -28,6 +28,7 @@ public static class CleanLayout
     public static string LaunchSettingsPath(string root) => $"{ApiDir(root)}/Properties/launchSettings.json";
     public static string SharedRequestPath(string root, string entityName, string kind) => $"{SharedDir(root)}/Requests/{kind}{entityName}Request.cs";
     public static string SharedResponsePath(string root, string entityName) => $"{SharedDir(root)}/Responses/{entityName}Response.cs";
+    public static string SharedSummaryResponsePath(string root, string entityName) => $"{SharedDir(root)}/Responses/{entityName}SummaryResponse.cs";
     public static string SharedPagedResponsePath(string root) => $"{SharedDir(root)}/Responses/PagedResponse.cs";
     public static string SharedEnumPath(string root, string enumName) => $"{SharedDir(root)}/Enums/{enumName}.cs";
     public static string SharedErrorPath(string root, string className) => $"{SharedDir(root)}/Errors/{className}.cs";

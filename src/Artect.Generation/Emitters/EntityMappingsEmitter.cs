@@ -89,6 +89,16 @@ public sealed class EntityMappingsEmitter : IEmitter
                 }
             }
             sb.AppendLine("        };");
+            sb.AppendLine();
+            sb.AppendLine($"    public static {name}SummaryResponse ToSummaryResponse(this {name}Dto dto) =>");
+            sb.AppendLine("        new()");
+            sb.AppendLine("        {");
+            foreach (var col in visibleColumns)
+            {
+                var prop = EntityNaming.PropertyName(col, corrections);
+                sb.AppendLine($"            {prop} = dto.{prop},");
+            }
+            sb.AppendLine("        };");
             if (hasDeprecatedVisible)
             {
                 sb.AppendLine("    #pragma warning restore CS0618");

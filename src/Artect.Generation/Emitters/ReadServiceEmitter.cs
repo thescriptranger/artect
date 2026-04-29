@@ -104,7 +104,7 @@ public sealed class ReadServiceEmitter : IEmitter
         {
             EmitAllowedSortFields(sb, sortableCols, corrections);
             sb.AppendLine();
-            EmitGetPaged(sb, name, dbset, allCols, pkProp, ctx.Config.MaxPageSize, corrections, childProjections);
+            EmitGetPaged(sb, name, dbset, allCols, pkProp, ctx.Config.MaxPageSize, corrections);
             EmitParseSort(sb);
             EmitApplyFirstSort(sb, name, sortableCols, corrections);
             EmitApplyChainedSort(sb, name, sortableCols, corrections);
@@ -134,7 +134,7 @@ public sealed class ReadServiceEmitter : IEmitter
 
     static void EmitGetPaged(StringBuilder sb, string name, string dbset, IReadOnlyList<Column> allCols,
         string pkProp, int maxPageSize,
-        IReadOnlyDictionary<string, string> corrections, IReadOnlyList<string> childProjections)
+        IReadOnlyDictionary<string, string> corrections)
     {
         sb.AppendLine($"    public async Task<(IReadOnlyList<{name}Dto> Items, int TotalCount)> GetPagedAsync(int page, int pageSize, string? sort, CancellationToken ct)");
         sb.AppendLine("    {");
@@ -174,8 +174,6 @@ public sealed class ReadServiceEmitter : IEmitter
             var prop = EntityNaming.PropertyName(col, corrections);
             sb.AppendLine($"                {prop} = e.{prop},");
         }
-        foreach (var childLine in childProjections)
-            sb.AppendLine($"                {childLine}");
         sb.AppendLine("            })");
         sb.AppendLine("            .ToListAsync(ct)");
         sb.AppendLine("            .ConfigureAwait(false);");
