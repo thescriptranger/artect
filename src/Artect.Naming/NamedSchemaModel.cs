@@ -27,15 +27,13 @@ public sealed class NamedSchemaModel
     {
         var dbSets = DbSetNaming.Build(graph);
         var entities = new List<NamedEntity>(graph.Tables.Count);
-        var emptyColMeta = (IReadOnlyDictionary<string, ColumnMetadata>)new Dictionary<string, ColumnMetadata>();
         foreach (var t in graph.Tables)
         {
             var typeName = dbSets.EntityTypeNames[(t.Schema, t.Name)];
             var dbSetName = dbSets.DbSetNames[(t.Schema, t.Name)];
             var classification = EntityClassifier.Classify(t, tableClassifications);
-            var colMeta = columnMetadata is not null && columnMetadata.TryGetValue(t.Name, out var m)
-                ? m
-                : emptyColMeta;
+            var userOverrides = columnMetadata is not null && columnMetadata.TryGetValue(t.Name, out var m) ? m : null;
+            var colMeta = ColumnHeuristic.Apply(t, userOverrides);
             entities.Add(new NamedEntity(
                 Table: t,
                 EntityTypeName: typeName,
