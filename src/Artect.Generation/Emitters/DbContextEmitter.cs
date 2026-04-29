@@ -98,8 +98,8 @@ public sealed class DbContextEmitter : IEmitter
             var propertyName = entity.DbSetPropertyName;
             var typeName     = entity.EntityTypeName;
             var typeRef = collidedEntityNames.Contains(typeName)
-                ? $"{entityNs}.{typeName}"
-                : typeName;
+                ? $"global::{entityNs}.{typeName}"
+                : EntityTypeRef.For(typeName, project);
             sb.AppendLine($"    public DbSet<{typeRef}> {propertyName} => Set<{typeRef}>();");
         }
 
@@ -149,8 +149,8 @@ public sealed class DbContextEmitter : IEmitter
                     EntityClassification.LookupData)) continue;
 
                 var entityRef = collidedEntityNames.Contains(entity.EntityTypeName)
-                    ? $"{entityNs}.{entity.EntityTypeName}"
-                    : entity.EntityTypeName;
+                    ? $"global::{entityNs}.{entity.EntityTypeName}"
+                    : EntityTypeRef.For(entity.EntityTypeName, project);
 
                 var predicates = new List<string>();
                 if (softDeleteCol is not null)

@@ -42,8 +42,8 @@ public sealed class EntityConfigurationsEmitter : IEmitter
                 EntityClassification.JoinTable)) continue;
             var typeName = entity.EntityTypeName;
             var typeRef = collidedEntityNames.Contains(typeName)
-                ? $"{entityNs}.{typeName}"
-                : typeName;
+                ? $"global::{entityNs}.{typeName}"
+                : EntityTypeRef.For(typeName, project);
 
             var sb = new StringBuilder();
             sb.AppendLine("using Microsoft.EntityFrameworkCore;");

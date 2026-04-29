@@ -58,6 +58,7 @@ public sealed class HandlerEmitter : IEmitter
     static EmittedFile BuildCreate(EmitterContext ctx, NamedEntity entity, string name, IReadOnlyList<Column> nonServerGen)
     {
         var project = ctx.Config.ProjectName;
+        var typeRef = EntityTypeRef.For(name, project);
         var corrections = ctx.NamingCorrections;
 
         var ns         = CleanLayout.ApplicationFeatureNamespace(project, name);
@@ -83,7 +84,7 @@ public sealed class HandlerEmitter : IEmitter
         sb.AppendLine("{");
         sb.AppendLine($"    public async Task<{name}Dto> HandleAsync(Create{name}Command command, CancellationToken ct)");
         sb.AppendLine("    {");
-        sb.AppendLine($"        var result = {name}.Create(");
+        sb.AppendLine($"        var result = {typeRef}.Create(");
         for (int i = 0; i < nonServerGen.Count; i++)
         {
             var col = nonServerGen[i];
@@ -94,10 +95,10 @@ public sealed class HandlerEmitter : IEmitter
             _ = paramName;
         }
         sb.AppendLine();
-        sb.AppendLine($"        if (result is Result<{name}>.Failure failure)");
+        sb.AppendLine($"        if (result is Result<{typeRef}>.Failure failure)");
         sb.AppendLine("            throw new DomainValidationException(failure.Errors);");
         sb.AppendLine();
-        sb.AppendLine($"        var entity = ((Result<{name}>.Success)result).Value;");
+        sb.AppendLine($"        var entity = ((Result<{typeRef}>.Success)result).Value;");
         sb.AppendLine();
         sb.AppendLine("        OnBeforeAdd(command, entity);");
         sb.AppendLine("        await repository.AddAsync(entity, ct).ConfigureAwait(false);");
@@ -105,12 +106,12 @@ public sealed class HandlerEmitter : IEmitter
         sb.AppendLine("        await unitOfWork.CommitAsync(ct).ConfigureAwait(false);");
         sb.AppendLine("        OnAfterCommit(command, entity);");
         sb.AppendLine();
-        sb.AppendLine($"        return DtoMapper.Map<{name}, {name}Dto>(entity);");
+        sb.AppendLine($"        return DtoMapper.Map<{typeRef}, {name}Dto>(entity);");
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine($"    partial void OnBeforeAdd(Create{name}Command command, {name} entity);");
-        sb.AppendLine($"    partial void OnBeforeCommit(Create{name}Command command, {name} entity);");
-        sb.AppendLine($"    partial void OnAfterCommit(Create{name}Command command, {name} entity);");
+        sb.AppendLine($"    partial void OnBeforeAdd(Create{name}Command command, {typeRef} entity);");
+        sb.AppendLine($"    partial void OnBeforeCommit(Create{name}Command command, {typeRef} entity);");
+        sb.AppendLine($"    partial void OnAfterCommit(Create{name}Command command, {typeRef} entity);");
         sb.AppendLine("}");
 
         var path = CleanLayout.ApplicationFeaturePath(project, name, $"Create{name}Handler");
@@ -125,6 +126,7 @@ public sealed class HandlerEmitter : IEmitter
         if (updateArgs.Count == 0) return null;
 
         var project = ctx.Config.ProjectName;
+        var typeRef = EntityTypeRef.For(name, project);
         var corrections = ctx.NamingCorrections;
 
         var pk = entity.Table.PrimaryKey!;
@@ -172,19 +174,19 @@ public sealed class HandlerEmitter : IEmitter
             sb.AppendLine($"            command.{prop}{terminator}");
         }
         sb.AppendLine();
-        sb.AppendLine($"        if (result is Result<{name}>.Failure failure)");
+        sb.AppendLine($"        if (result is Result<{typeRef}>.Failure failure)");
         sb.AppendLine("            throw new DomainValidationException(failure.Errors);");
         sb.AppendLine();
         sb.AppendLine("        OnBeforeCommit(command, existing);");
         sb.AppendLine("        await unitOfWork.CommitAsync(ct).ConfigureAwait(false);");
         sb.AppendLine("        OnAfterCommit(command, existing);");
         sb.AppendLine();
-        sb.AppendLine($"        return DtoMapper.Map<{name}, {name}Dto>(existing);");
+        sb.AppendLine($"        return DtoMapper.Map<{typeRef}, {name}Dto>(existing);");
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine($"    partial void OnBeforeUpdate({commandType} command, {name} existing);");
-        sb.AppendLine($"    partial void OnBeforeCommit({commandType} command, {name} entity);");
-        sb.AppendLine($"    partial void OnAfterCommit({commandType} command, {name} entity);");
+        sb.AppendLine($"    partial void OnBeforeUpdate({commandType} command, {typeRef} existing);");
+        sb.AppendLine($"    partial void OnBeforeCommit({commandType} command, {typeRef} entity);");
+        sb.AppendLine($"    partial void OnAfterCommit({commandType} command, {typeRef} entity);");
         sb.AppendLine("}");
 
         var path = CleanLayout.ApplicationFeaturePath(project, name, handlerName);
@@ -204,6 +206,7 @@ public sealed class HandlerEmitter : IEmitter
         if (updateArgs.Count == 0) return null;
 
         var project = ctx.Config.ProjectName;
+        var typeRef = EntityTypeRef.For(name, project);
         var corrections = ctx.NamingCorrections;
 
         var pk = entity.Table.PrimaryKey!;
@@ -260,19 +263,19 @@ public sealed class HandlerEmitter : IEmitter
             sb.AppendLine($"            command.{prop}.HasValue ? command.{prop}{unwrap} : existing.{prop}{terminator}");
         }
         sb.AppendLine();
-        sb.AppendLine($"        if (result is Result<{name}>.Failure failure)");
+        sb.AppendLine($"        if (result is Result<{typeRef}>.Failure failure)");
         sb.AppendLine("            throw new DomainValidationException(failure.Errors);");
         sb.AppendLine();
         sb.AppendLine("        OnBeforeCommit(command, existing);");
         sb.AppendLine("        await unitOfWork.CommitAsync(ct).ConfigureAwait(false);");
         sb.AppendLine("        OnAfterCommit(command, existing);");
         sb.AppendLine();
-        sb.AppendLine($"        return DtoMapper.Map<{name}, {name}Dto>(existing);");
+        sb.AppendLine($"        return DtoMapper.Map<{typeRef}, {name}Dto>(existing);");
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine($"    partial void OnBeforePatch({commandType} command, {name} existing);");
-        sb.AppendLine($"    partial void OnBeforeCommit({commandType} command, {name} entity);");
-        sb.AppendLine($"    partial void OnAfterCommit({commandType} command, {name} entity);");
+        sb.AppendLine($"    partial void OnBeforePatch({commandType} command, {typeRef} existing);");
+        sb.AppendLine($"    partial void OnBeforeCommit({commandType} command, {typeRef} entity);");
+        sb.AppendLine($"    partial void OnAfterCommit({commandType} command, {typeRef} entity);");
         sb.AppendLine("}");
 
         var path = CleanLayout.ApplicationFeaturePath(project, name, handlerName);

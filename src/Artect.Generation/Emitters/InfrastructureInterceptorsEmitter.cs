@@ -145,7 +145,7 @@ public sealed class InfrastructureInterceptorsEmitter : IEmitter
                     tenantProp = prop;
             }
             if (auditCols.Count == 0 && tenantProp is null) continue;
-            auditEntries.Add((entity.EntityTypeName, auditCols, tenantProp));
+            auditEntries.Add((EntityTypeRef.For(entity.EntityTypeName, ctx.Config.ProjectName), auditCols, tenantProp));
         }
 
         var sb = new StringBuilder();

@@ -27,6 +27,7 @@ public sealed class SortHelperEmitter : IEmitter
     {
         var project = ctx.Config.ProjectName;
         var name = entity.EntityTypeName;
+        var typeRef = EntityTypeRef.For(name, project);
         var corrections = ctx.NamingCorrections;
 
         var sortableCols = entity.Table.Columns
@@ -72,7 +73,7 @@ public sealed class SortHelperEmitter : IEmitter
         sb.AppendLine("        return items;");
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine($"    public static System.Linq.IOrderedQueryable<{name}> ApplyFirst(System.Linq.IQueryable<{name}> q, string field, bool descending) =>");
+        sb.AppendLine($"    public static System.Linq.IOrderedQueryable<{typeRef}> ApplyFirst(System.Linq.IQueryable<{typeRef}> q, string field, bool descending) =>");
         sb.AppendLine("        (field, descending) switch");
         sb.AppendLine("        {");
         foreach (var col in sortableCols)
@@ -84,7 +85,7 @@ public sealed class SortHelperEmitter : IEmitter
         sb.AppendLine("            _ => throw new System.InvalidOperationException(\"Unreachable: sort field allowlist already validated.\"),");
         sb.AppendLine("        };");
         sb.AppendLine();
-        sb.AppendLine($"    public static System.Linq.IOrderedQueryable<{name}> ApplyChained(System.Linq.IOrderedQueryable<{name}> q, string field, bool descending) =>");
+        sb.AppendLine($"    public static System.Linq.IOrderedQueryable<{typeRef}> ApplyChained(System.Linq.IOrderedQueryable<{typeRef}> q, string field, bool descending) =>");
         sb.AppendLine("        (field, descending) switch");
         sb.AppendLine("        {");
         foreach (var col in sortableCols)

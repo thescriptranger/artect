@@ -48,6 +48,7 @@ public sealed class ReadServiceEmitter : IEmitter
         var project = ctx.Config.ProjectName;
         var crud    = ctx.Config.Crud;
         var name    = entity.EntityTypeName;
+        var typeRef = EntityTypeRef.For(name, project);
         var dbset   = entity.DbSetPropertyName;
         var dbCtx   = $"{project}DbContext";
         var corrections = ctx.NamingCorrections;
@@ -93,7 +94,7 @@ public sealed class ReadServiceEmitter : IEmitter
 
         if ((crud & CrudOperation.GetList) != 0)
         {
-            EmitGetPaged(sb, name, dbset, allCols, pkProp, ctx.Config.MaxPageSize, corrections);
+            EmitGetPaged(sb, name, typeRef, dbset, allCols, pkProp, ctx.Config.MaxPageSize, corrections);
             if ((crud & CrudOperation.GetById) != 0) sb.AppendLine();
         }
         if ((crud & CrudOperation.GetById) != 0)
@@ -105,7 +106,7 @@ public sealed class ReadServiceEmitter : IEmitter
         return new EmittedFile(path, sb.ToString());
     }
 
-    static void EmitGetPaged(StringBuilder sb, string name, string dbset, IReadOnlyList<Column> allCols,
+    static void EmitGetPaged(StringBuilder sb, string name, string typeRef, string dbset, IReadOnlyList<Column> allCols,
         string pkProp, int maxPageSize,
         IReadOnlyDictionary<string, string> corrections)
     {
@@ -117,10 +118,10 @@ public sealed class ReadServiceEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine($"        var sortItems = {name}SortHelper.Parse(sort);");
         sb.AppendLine();
-        sb.AppendLine($"        IQueryable<{name}> query = db.{dbset}.AsNoTracking();");
+        sb.AppendLine($"        IQueryable<{typeRef}> query = db.{dbset}.AsNoTracking();");
         sb.AppendLine("        var totalCount = await query.CountAsync(ct).ConfigureAwait(false);");
         sb.AppendLine();
-        sb.AppendLine($"        IOrderedQueryable<{name}> ordered;");
+        sb.AppendLine($"        IOrderedQueryable<{typeRef}> ordered;");
         sb.AppendLine("        if (sortItems.Count == 0)");
         sb.AppendLine("        {");
         sb.AppendLine($"            ordered = query.OrderBy(e => e.{pkProp});");

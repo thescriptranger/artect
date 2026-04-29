@@ -30,9 +30,10 @@ public sealed class RepositoryInterfaceEmitter : IEmitter
         {
             if (entity.ShouldSkip(EntityClassification.AggregateRoot)) continue;
 
-            var name   = entity.EntityTypeName;
-            var ns     = CleanLayout.ApplicationFeatureAbstractionsNamespace(project, name);
-            var pkType = PkType(entity.Table);
+            var name    = entity.EntityTypeName;
+            var typeRef = EntityTypeRef.For(name, project);
+            var ns      = CleanLayout.ApplicationFeatureAbstractionsNamespace(project, name);
+            var pkType  = PkType(entity.Table);
 
             var sb = new StringBuilder();
             sb.AppendLine($"using {entityNs};");
@@ -42,16 +43,14 @@ public sealed class RepositoryInterfaceEmitter : IEmitter
             sb.AppendLine();
             sb.AppendLine($"public interface I{name}Repository : IRepository");
             sb.AppendLine("{");
-            sb.AppendLine($"    Task<{name}?> GetByIdAsync({pkType} id, CancellationToken ct);");
+            sb.AppendLine($"    Task<{typeRef}?> GetByIdAsync({pkType} id, CancellationToken ct);");
             sb.AppendLine($"    Task<bool> ExistsAsync({pkType} id, CancellationToken ct);");
             foreach (var (prop, type) in SingleColumnUniques(entity.Table, ctx.NamingCorrections))
                 sb.AppendLine($"    Task<bool> ExistsBy{prop}Async({type} value, CancellationToken ct);");
             if ((crud & CrudOperation.Post) != 0)
-                sb.AppendLine($"    Task AddAsync({name} entity, CancellationToken ct);");
-            // V#3: ApplyChanges removed. Update/Patch handlers call domain methods on
-            // the loaded aggregate; EF persists tracked mutations on commit.
+                sb.AppendLine($"    Task AddAsync({typeRef} entity, CancellationToken ct);");
             if ((crud & CrudOperation.Delete) != 0)
-                sb.AppendLine($"    void Remove({name} entity);");
+                sb.AppendLine($"    void Remove({typeRef} entity);");
             sb.AppendLine("}");
 
             var path = CleanLayout.ApplicationFeatureAbstractionsPath(project, name, $"I{name}Repository");

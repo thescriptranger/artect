@@ -59,6 +59,7 @@ public sealed class DomainTestsEmitter : IEmitter
     {
         var project = ctx.Config.ProjectName;
         var e = entity.EntityTypeName;
+        var typeRef = EntityTypeRef.For(e, project);
         var sb = new StringBuilder();
         sb.AppendLine("using System.Linq;");
         sb.AppendLine("using FluentAssertions;");
@@ -80,8 +81,8 @@ public sealed class DomainTestsEmitter : IEmitter
             sb.AppendLine($"    [Fact]");
             sb.AppendLine($"    public void Create_rejects_empty_{colName}()");
             sb.AppendLine("    {");
-            sb.AppendLine($"        var result = {e}.Create({BuildCreateArgs(entity, failingCol: colName)});");
-            sb.AppendLine($"        result.Should().BeOfType<Result<{e}>.Failure>();");
+            sb.AppendLine($"        var result = {typeRef}.Create({BuildCreateArgs(entity, failingCol: colName)});");
+            sb.AppendLine($"        result.Should().BeOfType<Result<{typeRef}>.Failure>();");
             sb.AppendLine("    }");
             sb.AppendLine();
         }
@@ -90,8 +91,8 @@ public sealed class DomainTestsEmitter : IEmitter
         sb.AppendLine("    [Fact]");
         sb.AppendLine("    public void Create_succeeds_with_minimal_valid_input()");
         sb.AppendLine("    {");
-        sb.AppendLine($"        var result = {e}.Create({BuildCreateArgs(entity)});");
-        sb.AppendLine($"        result.Should().BeOfType<Result<{e}>.Success>();");
+        sb.AppendLine($"        var result = {typeRef}.Create({BuildCreateArgs(entity)});");
+        sb.AppendLine($"        result.Should().BeOfType<Result<{typeRef}>.Success>();");
         sb.AppendLine("    }");
 
         // Update behavior — only for AggregateRoot/OwnedEntity with at least one mutable column.
@@ -101,10 +102,10 @@ public sealed class DomainTestsEmitter : IEmitter
             sb.AppendLine("    [Fact]");
             sb.AppendLine("    public void Update_succeeds_with_minimal_valid_input()");
             sb.AppendLine("    {");
-            sb.AppendLine($"        var createResult = {e}.Create({BuildCreateArgs(entity)});");
-            sb.AppendLine($"        var instance = ((Result<{e}>.Success)createResult).Value;");
+            sb.AppendLine($"        var createResult = {typeRef}.Create({BuildCreateArgs(entity)});");
+            sb.AppendLine($"        var instance = ((Result<{typeRef}>.Success)createResult).Value;");
             sb.AppendLine($"        var updateResult = instance.Update({BuildUpdateArgs(entity)});");
-            sb.AppendLine($"        updateResult.Should().BeOfType<Result<{e}>.Success>();");
+            sb.AppendLine($"        updateResult.Should().BeOfType<Result<{typeRef}>.Success>();");
             sb.AppendLine("    }");
 
             // V#14 acceptance #4: prove Update enforces the same invariants as Create —
@@ -119,10 +120,10 @@ public sealed class DomainTestsEmitter : IEmitter
                 sb.AppendLine($"    [Fact]");
                 sb.AppendLine($"    public void Update_rejects_empty_{colName}()");
                 sb.AppendLine("    {");
-                sb.AppendLine($"        var createResult = {e}.Create({BuildCreateArgs(entity)});");
-                sb.AppendLine($"        var instance = ((Result<{e}>.Success)createResult).Value;");
+                sb.AppendLine($"        var createResult = {typeRef}.Create({BuildCreateArgs(entity)});");
+                sb.AppendLine($"        var instance = ((Result<{typeRef}>.Success)createResult).Value;");
                 sb.AppendLine($"        var updateResult = instance.Update({BuildUpdateArgs(entity, failingCol: colName)});");
-                sb.AppendLine($"        updateResult.Should().BeOfType<Result<{e}>.Failure>();");
+                sb.AppendLine($"        updateResult.Should().BeOfType<Result<{typeRef}>.Failure>();");
                 sb.AppendLine("    }");
             }
 
@@ -137,10 +138,10 @@ public sealed class DomainTestsEmitter : IEmitter
                 sb.AppendLine($"    [Fact]");
                 sb.AppendLine($"    public void Update_rejects_{colName}_too_long()");
                 sb.AppendLine("    {");
-                sb.AppendLine($"        var createResult = {e}.Create({BuildCreateArgs(entity)});");
-                sb.AppendLine($"        var instance = ((Result<{e}>.Success)createResult).Value;");
+                sb.AppendLine($"        var createResult = {typeRef}.Create({BuildCreateArgs(entity)});");
+                sb.AppendLine($"        var instance = ((Result<{typeRef}>.Success)createResult).Value;");
                 sb.AppendLine($"        var updateResult = instance.Update({BuildUpdateArgs(entity, oversizedCol: colName, oversizedLength: max + 1)});");
-                sb.AppendLine($"        updateResult.Should().BeOfType<Result<{e}>.Failure>();");
+                sb.AppendLine($"        updateResult.Should().BeOfType<Result<{typeRef}>.Failure>();");
                 sb.AppendLine("    }");
             }
         }
@@ -156,7 +157,7 @@ public sealed class DomainTestsEmitter : IEmitter
             sb.AppendLine("    [Fact]");
             sb.AppendLine($"    public void {e}_properties_have_no_public_setters()");
             sb.AppendLine("    {");
-            sb.AppendLine($"        var offenders = typeof({e}).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)");
+            sb.AppendLine($"        var offenders = typeof({typeRef}).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)");
             sb.AppendLine("            .Where(p => p.SetMethod is { IsPublic: true })");
             sb.AppendLine("            .Select(p => p.Name)");
             sb.AppendLine("            .ToList();");

@@ -37,6 +37,7 @@ public sealed class RepositoryEmitter : IEmitter
         var project = ctx.Config.ProjectName;
         var crud    = ctx.Config.Crud;
         var name    = entity.EntityTypeName;
+        var typeRef = EntityTypeRef.For(name, project);
         var dbset   = entity.DbSetPropertyName;
         var dbCtx   = $"{project}DbContext";
         var corrections = ctx.NamingCorrections;
@@ -63,7 +64,7 @@ public sealed class RepositoryEmitter : IEmitter
         sb.AppendLine();
         sb.AppendLine($"public sealed class {name}Repository({dbCtx} db) : I{name}Repository");
         sb.AppendLine("{");
-        sb.AppendLine($"    public Task<{name}?> GetByIdAsync({pkType} id, CancellationToken ct) =>");
+        sb.AppendLine($"    public Task<{typeRef}?> GetByIdAsync({pkType} id, CancellationToken ct) =>");
         sb.AppendLine($"        db.{dbset}.FirstOrDefaultAsync(e => e.{pkProp} == id, ct);");
         sb.AppendLine();
         sb.AppendLine($"    public Task<bool> ExistsAsync({pkType} id, CancellationToken ct) =>");
@@ -79,26 +80,20 @@ public sealed class RepositoryEmitter : IEmitter
         if ((crud & CrudOperation.Post) != 0)
         {
             sb.AppendLine();
-            sb.AppendLine($"    public async Task AddAsync({name} entity, CancellationToken ct) =>");
+            sb.AppendLine($"    public async Task AddAsync({typeRef} entity, CancellationToken ct) =>");
             sb.AppendLine($"        await db.{dbset}.AddAsync(entity, ct).ConfigureAwait(false);");
         }
-        // V#3: no ApplyChanges. Update/Patch handlers call domain methods on the loaded
-        // aggregate; EF tracks the private-setter mutations and persists them on commit.
         if ((crud & CrudOperation.Delete) != 0)
         {
             sb.AppendLine();
-            // V#12: when the entity carries a SoftDeleteFlag column, Remove() calls the
-            // entity's SoftDelete() domain method instead of physically deleting the row.
-            // EF tracks the flag mutation; the DbContext's HasQueryFilter then hides the
-            // soft-deleted row from subsequent queries unless IgnoreQueryFilters() is used.
             if (entity.AnyColumnHasFlag(ColumnMetadata.SoftDeleteFlag))
             {
-                sb.AppendLine($"    public void Remove({name} entity) =>");
+                sb.AppendLine($"    public void Remove({typeRef} entity) =>");
                 sb.AppendLine($"        entity.SoftDelete();");
             }
             else
             {
-                sb.AppendLine($"    public void Remove({name} entity) =>");
+                sb.AppendLine($"    public void Remove({typeRef} entity) =>");
                 sb.AppendLine($"        db.{dbset}.Remove(entity);");
             }
         }
