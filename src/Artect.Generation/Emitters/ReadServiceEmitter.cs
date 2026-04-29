@@ -61,15 +61,6 @@ public sealed class ReadServiceEmitter : IEmitter
         var pkType = SqlTypeMap.ToCs(pkColumns[0].ClrType);
 
         var allCols = entity.Table.Columns.ToList();
-        // V#11: sortable fields are the visible columns (non-Ignored, non-Sensitive).
-        // Sorting on Sensitive columns leaks ordering info through pagination, so we
-        // refuse it. Composition is fine: the user can flag a column Sensitive purely
-        // to keep it out of sort URLs without affecting the Response (already handled
-        // by V#1).
-        var sortableCols = allCols
-            .Where(c => !entity.ColumnHasFlag(c.Name, ColumnMetadata.Ignored))
-            .Where(c => !entity.ColumnHasFlag(c.Name, ColumnMetadata.Sensitive))
-            .ToList();
 
         var includeChildren = ctx.Config.IncludeChildCollectionsInResponses;
         var childProjections = includeChildren
@@ -102,12 +93,7 @@ public sealed class ReadServiceEmitter : IEmitter
 
         if ((crud & CrudOperation.GetList) != 0)
         {
-            EmitAllowedSortFields(sb, sortableCols, corrections);
-            sb.AppendLine();
             EmitGetPaged(sb, name, dbset, allCols, pkProp, ctx.Config.MaxPageSize, corrections);
-            EmitParseSort(sb);
-            EmitApplyFirstSort(sb, name, sortableCols, corrections);
-            EmitApplyChainedSort(sb, name, sortableCols, corrections);
             if ((crud & CrudOperation.GetById) != 0) sb.AppendLine();
         }
         if ((crud & CrudOperation.GetById) != 0)
@@ -117,19 +103,6 @@ public sealed class ReadServiceEmitter : IEmitter
 
         var path = CleanLayout.InfrastructureDataEntityPath(project, name, $"{name}ReadService");
         return new EmittedFile(path, sb.ToString());
-    }
-
-    static void EmitAllowedSortFields(StringBuilder sb, IReadOnlyList<Column> sortableCols, IReadOnlyDictionary<string, string> corrections)
-    {
-        sb.AppendLine("    private static readonly System.Collections.Generic.IReadOnlyDictionary<string, string> _allowedSortFields =");
-        sb.AppendLine("        new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase)");
-        sb.AppendLine("        {");
-        foreach (var col in sortableCols)
-        {
-            var prop = EntityNaming.PropertyName(col, corrections);
-            sb.AppendLine($"            [\"{prop}\"] = \"{prop}\",");
-        }
-        sb.AppendLine("        };");
     }
 
     static void EmitGetPaged(StringBuilder sb, string name, string dbset, IReadOnlyList<Column> allCols,
@@ -142,7 +115,7 @@ public sealed class ReadServiceEmitter : IEmitter
         sb.AppendLine("        if (pageSize < 1) pageSize = 50;");
         sb.AppendLine($"        if (pageSize > {maxPageSize}) pageSize = {maxPageSize};");
         sb.AppendLine();
-        sb.AppendLine("        var sortItems = ParseSort(sort);");
+        sb.AppendLine($"        var sortItems = {name}SortHelper.Parse(sort);");
         sb.AppendLine();
         sb.AppendLine($"        IQueryable<{name}> query = db.{dbset}.AsNoTracking();");
         sb.AppendLine("        var totalCount = await query.CountAsync(ct).ConfigureAwait(false);");
@@ -155,11 +128,11 @@ public sealed class ReadServiceEmitter : IEmitter
         sb.AppendLine("        else");
         sb.AppendLine("        {");
         sb.AppendLine("            var (firstField, firstDesc) = sortItems[0];");
-        sb.AppendLine("            ordered = ApplyFirstSort(query, firstField, firstDesc);");
+        sb.AppendLine($"            ordered = {name}SortHelper.ApplyFirst(query, firstField, firstDesc);");
         sb.AppendLine("            for (var i = 1; i < sortItems.Count; i++)");
         sb.AppendLine("            {");
         sb.AppendLine("                var (field, desc) = sortItems[i];");
-        sb.AppendLine("                ordered = ApplyChainedSort(ordered, field, desc);");
+        sb.AppendLine($"                ordered = {name}SortHelper.ApplyChained(ordered, field, desc);");
         sb.AppendLine("            }");
         sb.AppendLine($"            ordered = ordered.ThenBy(e => e.{pkProp});");
         sb.AppendLine("        }");
@@ -179,58 +152,6 @@ public sealed class ReadServiceEmitter : IEmitter
         sb.AppendLine("            .ConfigureAwait(false);");
         sb.AppendLine("        return (items, totalCount);");
         sb.AppendLine("    }");
-    }
-
-    static void EmitParseSort(StringBuilder sb)
-    {
-        sb.AppendLine();
-        sb.AppendLine("    private static System.Collections.Generic.List<(string Field, bool Descending)> ParseSort(string? sort)");
-        sb.AppendLine("    {");
-        sb.AppendLine("        var items = new System.Collections.Generic.List<(string, bool)>();");
-        sb.AppendLine("        if (string.IsNullOrWhiteSpace(sort)) return items;");
-        sb.AppendLine("        foreach (var raw in sort.Split(',', System.StringSplitOptions.RemoveEmptyEntries | System.StringSplitOptions.TrimEntries))");
-        sb.AppendLine("        {");
-        sb.AppendLine("            var desc = raw.StartsWith('-');");
-        sb.AppendLine("            var field = desc ? raw[1..].Trim() : raw;");
-        sb.AppendLine("            if (!_allowedSortFields.TryGetValue(field, out var canonical))");
-        sb.AppendLine("                throw new QueryValidationException(\"sort\",");
-        sb.AppendLine("                    $\"Unknown sort field: '{field}'. Allowed: {string.Join(\", \", _allowedSortFields.Values)}.\");");
-        sb.AppendLine("            items.Add((canonical, desc));");
-        sb.AppendLine("        }");
-        sb.AppendLine("        return items;");
-        sb.AppendLine("    }");
-    }
-
-    static void EmitApplyFirstSort(StringBuilder sb, string name, IReadOnlyList<Column> sortableCols, IReadOnlyDictionary<string, string> corrections)
-    {
-        sb.AppendLine();
-        sb.AppendLine($"    private static IOrderedQueryable<{name}> ApplyFirstSort(IQueryable<{name}> q, string field, bool descending) =>");
-        sb.AppendLine("        (field, descending) switch");
-        sb.AppendLine("        {");
-        foreach (var col in sortableCols)
-        {
-            var prop = EntityNaming.PropertyName(col, corrections);
-            sb.AppendLine($"            (\"{prop}\", false) => q.OrderBy(e => e.{prop}),");
-            sb.AppendLine($"            (\"{prop}\", true)  => q.OrderByDescending(e => e.{prop}),");
-        }
-        sb.AppendLine("            _ => throw new System.InvalidOperationException(\"Unreachable: sort field allowlist already validated.\"),");
-        sb.AppendLine("        };");
-    }
-
-    static void EmitApplyChainedSort(StringBuilder sb, string name, IReadOnlyList<Column> sortableCols, IReadOnlyDictionary<string, string> corrections)
-    {
-        sb.AppendLine();
-        sb.AppendLine($"    private static IOrderedQueryable<{name}> ApplyChainedSort(IOrderedQueryable<{name}> q, string field, bool descending) =>");
-        sb.AppendLine("        (field, descending) switch");
-        sb.AppendLine("        {");
-        foreach (var col in sortableCols)
-        {
-            var prop = EntityNaming.PropertyName(col, corrections);
-            sb.AppendLine($"            (\"{prop}\", false) => q.ThenBy(e => e.{prop}),");
-            sb.AppendLine($"            (\"{prop}\", true)  => q.ThenByDescending(e => e.{prop}),");
-        }
-        sb.AppendLine("            _ => throw new System.InvalidOperationException(\"Unreachable: sort field allowlist already validated.\"),");
-        sb.AppendLine("        };");
     }
 
     static void EmitGetById(StringBuilder sb, string name, string dbset, string pkProp, string pkType,
