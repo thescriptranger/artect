@@ -285,6 +285,7 @@ public sealed class HandlerEmitter : IEmitter
     static EmittedFile BuildDelete(EmitterContext ctx, NamedEntity entity, string name)
     {
         var project = ctx.Config.ProjectName;
+        var typeRef = EntityTypeRef.For(name, project);
         var corrections = ctx.NamingCorrections;
 
         var pk = entity.Table.PrimaryKey!;
@@ -323,9 +324,9 @@ public sealed class HandlerEmitter : IEmitter
         sb.AppendLine("        return true;");
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine($"    partial void OnBeforeRemove({name} entity);");
-        sb.AppendLine($"    partial void OnBeforeCommit({name} entity);");
-        sb.AppendLine($"    partial void OnAfterCommit({name} entity);");
+        sb.AppendLine($"    partial void OnBeforeRemove({typeRef} entity);");
+        sb.AppendLine($"    partial void OnBeforeCommit({typeRef} entity);");
+        sb.AppendLine($"    partial void OnAfterCommit({typeRef} entity);");
         sb.AppendLine("}");
 
         var path = CleanLayout.ApplicationFeaturePath(project, name, handlerName);
